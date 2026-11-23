@@ -270,7 +270,7 @@ export function buildClass({ name, log, completion = null, period = null, overri
         ...activeDays.slice(1).map((day, i) => daysBetween(activeDays[i], day) - 1)]
       : [Math.max(0, daysBetween(start, refDate) + 1)];
     const done = completedByName.get(normalizeName(name));
-    return {
+    const row = {
       name, code, accesses: accesses.length, daysActive: activeDays.length,
       weeksActive: firstHalfWeeks + secondHalfWeeks, weeklyDays, activeDays, firstHalfWeeks, secondHalfWeeks,
       longestAbsence: absences.reduce((max, days) => Math.max(max, days), 0), daysSinceLast,
@@ -280,10 +280,101 @@ export function buildClass({ name, log, completion = null, period = null, overri
       completed: done ? done.filter(Boolean).length : null,
       completionTotal: done ? activities.length : null, done: done ?? null,
     };
+    row.pattern = !completion && !row.accesses ? 'irregular' : classifyPattern(row, weeks, absenceLimit);
+    return row;
   });
   return {
     name, period, weeks, refDate, students, staff: people.staff, source: people.source,
     hasCompletion: Boolean(completion), activities, absenceLimit,
     warnings: completion ? [] : ['Estudantes que nunca acessaram não aparecem. Carregue a conclusão de atividades para incluí-los.'],
   };
+}
+
+export const PATTERNS = [
+  { id: 'sem-acesso', label: 'Sem acesso', tone: 'red', strategy: 'Contato individual para entender possíveis dificuldades' },
+  { id: 'afastamento', label: 'Afastamento', tone: 'red', strategy: 'Contato individual para entender possíveis dificuldades' },
+  { id: 'queda', label: 'Queda progressiva', tone: 'amber', strategy: 'Acompanhamento individual e incentivo à retomada' },
+  { id: 'concentrado', label: 'Acesso concentrado', tone: 'amber', strategy: 'Orientação sobre rotina de estudos' },
+  { id: 'irregular', label: 'Irregular', tone: 'amber', strategy: 'Lembretes e orientações periódicas' },
+  { id: 'regular', label: 'Regular', tone: 'green', strategy: '' },
+];
+
+export function classifyPattern(row, weeks, absenceLimit) {
+  if (!row.accesses) return 'sem-acesso';
+  if (row.daysSinceLast >= absenceLimit) return 'afastamento';
+  if (row.firstHalfWeeks >= 3 && row.secondHalfWeeks <= 0.5 * row.firstHalfWeeks) return 'queda';
+  const busiest = [...row.weeklyDays].sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0);
+  if (row.weeksActive < 0.4 * weeks && busiest > 0.5 * row.daysActive) return 'concentrado';
+  if (row.weeksActive < 0.7 * weeks || row.longestAbsence >= absenceLimit) return 'irregular';
+  return 'regular';
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (!sorted.length) return 0;
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function mean(values) {
+  return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+}
+
+function percent(part, total) {
+  return total ? Math.round(1000 * part / total) / 10 : 0;
+}
+
+export function summarizeClass(c) {
+  const n = c.students.length;
+  const values = field => c.students.map(row => row[field]);
+  const patternCounts = Object.fromEntries(PATTERNS.map(({ id }) => [id, 0]));
+  for (const row of c.students) patternCounts[row.pattern]++;
+  const patternPct = Object.fromEntries(PATTERNS.map(({ id }) => [id, percent(patternCounts[id], n)]));
+  const completion = c.students.filter(row => row.completionTotal).map(row => 100 * row.completed / row.completionTotal);
+  return {
+    name: c.name, n, staffCount: c.staff.length, start: c.period.start, end: c.period.end, weeks: c.weeks,
+    medianWeeksActive: median(values('weeksActive')), meanWeeksActive: mean(values('weeksActive')),
+    medianDaysActive: median(values('daysActive')), medianLongestAbsence: median(values('longestAbsence')),
+    patternCounts, patternPct,
+    studentsWithGap7: values('gaps7').filter(Boolean).length,
+    studentsWithGap14: values('gaps14').filter(Boolean).length,
+    studentsWithGap21: values('gaps21').filter(Boolean).length,
+    medianCompletionPct: completion.length ? Number(median(completion).toFixed(1)) : null,
+  };
+}
+
+export function weeklySeries(c) {
+  const counts = Array(c.weeks).fill(0);
+  for (const row of c.students) row.weeklyDays.forEach((days, index) => { if (days) counts[index]++; });
+  return counts.map((n, index) => ({ week: index + 1, n, pct: percent(n, c.students.length) }));
+}
+
+export function sustainedDeclineWeek(series) {
+  let index = series.length - 1;
+  while (index >= 1 && series[index].pct < 50) index--;
+  return index < series.length - 1 ? series[index + 1].week : null;
+}
+
+export function titleWeekly(series) {
+  const week = sustainedDeclineWeek(series);
+  if (week !== null) return `A partir da semana ${week}, menos da metade da turma acessou o curso`;
+  const first = series[0]?.pct ?? 0;
+  const last = series.at(-1)?.pct ?? 0;
+  if (last <= first - 20) return `O acesso caiu de ${Math.round(first)}% na semana 1 para ${Math.round(last)}% na última semana`;
+  return 'A maior parte da turma acessou o curso em todas as semanas';
+}
+
+export function titleCompare(entries) {
+  if (entries.length < 2) return titleWeekly(entries[0]?.series ?? []);
+  const finalMean = ({ series }) => mean(series.slice(Math.ceil(series.length / 2)).map(row => row.pct));
+  const [leader] = [...entries].sort((a, b) => finalMean(b) - finalMean(a));
+  return `${leader.name} manteve mais estudantes acessando até o fim da oferta`;
+}
+
+export function titlePatterns(summary) {
+  const [top] = PATTERNS.filter(({ id }) => id !== 'regular')
+    .sort((a, b) => summary.patternCounts[b.id] - summary.patternCounts[a.id]);
+  const count = summary.patternCounts[top.id];
+  return count ? `${top.label} foi o padrão de atenção mais frequente (${count} de ${summary.n} estudantes)`
+    : 'Todos os estudantes tiveram acesso regular';
 }
