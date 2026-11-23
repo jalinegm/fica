@@ -1,4 +1,3 @@
 *.csv
-!exemplos/*.csv
 saida/
 node_modules/

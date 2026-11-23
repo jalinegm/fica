@@ -53,15 +53,14 @@ Use Node.js 20 ou superior. O projeto usa apenas recursos nativos do Node e do n
 ```sh
 npm test
 npm run build
-node scripts/gerar-exemplos.mjs
 ```
 
 O build gera o `index.html` na raiz. Para publicar no GitHub Pages, selecione o branch principal e a raiz como fonte. O arquivo `.nojekyll` permite servir a página diretamente.
 
-O gerador do TCC usa o mesmo cálculo da página. Este exemplo usa os CSVs fictícios do repositório. Indique uma pasta de saída fora do repositório ao trabalhar com dados reais.
+O gerador de tabelas e figuras (usado no TCC) faz o mesmo cálculo da página. Indique uma pasta de saída fora do repositório: os logs têm dados pessoais e nunca devem ser versionados.
 
 ```sh
-node tcc/gerar.mjs --turma "2025/1" --log exemplos/log_exemplo_2025-1.csv --turma "2026/1" --log exemplos/log_exemplo_2026-1.csv --conclusao exemplos/conclusao_exemplo_2026-1.csv --out ../fica-resultados --limite 14
+node tcc/gerar.mjs --turma "2025/1" --log logs_2025.csv --conclusao conclusao_2025.csv --turma "2026/1" --log logs_2026.csv --conclusao conclusao_2026.csv --out ../fica-resultados --limite 14
 ```
 
 O gerador salva os indicadores por estudante identificado por código, o resumo por turma, a série semanal e duas figuras SVG.
