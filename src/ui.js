@@ -1,4 +1,4 @@
-import { buildClass, parseLog, parseCompletion, normalizeName, FormatError } from './core.js';
+import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass } from './core.js';
 import { escapeMarkup } from './charts.js';
 import { generateDemo } from './demo.js';
 
@@ -102,6 +102,7 @@ function helpView() {
 }
 
 function analysisView(state, c) {
+  if (state.tab === 'triage') return triageView(state, c);
   const label = tabs.find(([id]) => state.tab === id)[1];
   return `<section class="surface"><h1 data-view-heading tabindex="-1">${label}</h1><p>${c.students.length} estudantes · ${periodLabel(c.period)}</p></section>`;
 }
@@ -217,6 +218,7 @@ function showDemo() {
 }
 
 function openTab(tab) {
+  notice('');
   update({ tab }, '#tab-' + tab);
 }
 
@@ -226,10 +228,11 @@ function bindPage() {
     if (!button) return;
     if (button.dataset.tab) openTab(button.dataset.tab);
     switch (button.dataset.action) {
-      case 'help': changeView('help', { returnView: currentState.view }); break;
+      case 'help': if (currentState.view !== 'help') changeView('help', { returnView: currentState.view }); break;
       case 'back': changeView(currentState.returnView ?? 'upload'); break;
       case 'upload': changeView('upload', { draft: null }); break;
       case 'demo': showDemo(); break;
+      case 'copy': void copyGroup(button.dataset.group); break;
     }
   });
   document.addEventListener('keydown', event => {
@@ -247,7 +250,16 @@ function bindPage() {
     else submitReview(event.target);
   });
   document.addEventListener('change', event => {
-    if (event.target.id === 'active-class') update({ activeIndex: Number(event.target.value) }, '#active-class');
+    if (event.target.id === 'absence-limit') {
+      const absenceLimit = Number(event.target.value);
+      const classes = currentState.classes.map(c => completeOffer(c, absenceLimit));
+      notice('');
+      update({ classes, absenceLimit }, '#absence-limit');
+    }
+    if (event.target.id === 'active-class') {
+      notice('');
+      update({ activeIndex: Number(event.target.value) }, '#active-class');
+    }
     if (event.target.type === 'file') fileError(event.target, '');
   });
   for (const type of ['dragover', 'dragleave', 'drop']) {
@@ -271,3 +283,102 @@ function bindPage() {
 }
 
 if (typeof document !== 'undefined') bindPage();
+
+export function triageGroups(c) {
+  return PATTERNS.slice(1, -1).map(pattern => {
+    const first = pattern.id === 'afastamento';
+    const students = c.students.filter(row => row.pattern === pattern.id || (first && row.pattern === 'sem-acesso'));
+    students.sort((a, b) => (b.daysSinceLast ?? Infinity) - (a.daysSinceLast ?? Infinity));
+    return { ...pattern, label: first ? 'Sem acesso ou afastamento' : pattern.label, students };
+  });
+}
+
+export function studentReason(row, weeks) {
+  switch (row.pattern) {
+    case 'sem-acesso': return 'nenhum acesso no período';
+    case 'afastamento': return `sem acesso há ${row.daysSinceLast} dias`;
+    case 'queda': return `${row.firstHalfWeeks} semanas com acesso na 1ª metade, ${row.secondHalfWeeks} na 2ª`;
+    case 'concentrado': return `acessos em ${row.daysActive} dias`;
+    default: return `${row.weeksActive} de ${weeks} semanas com acesso`;
+  }
+}
+
+const accessReminder = 'Acesso ao Moodle não é o mesmo que participação ou aprendizagem. Use estes sinais para conversar com o estudante.';
+const numberPt = value => value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const shownName = (row, state) => state.anonymize ? row.code : row.name;
+
+function classNumbers(c) {
+  const summary = summarizeClass(c);
+  const metrics = [
+    [summary.n, 'Estudantes'],
+    [numberPt(summary.medianWeeksActive) + ' de ' + c.weeks, 'Semanas com acesso (mediana)'],
+    [c.students.filter(row => row.longestAbsence >= c.absenceLimit).length, 'Estudantes com ausência de ' + c.absenceLimit + '+ dias'],
+    [summary.patternCounts['sem-acesso'] + summary.patternCounts.afastamento, 'Sem acesso ou em afastamento'],
+  ];
+  return `<dl class="class-numbers">${metrics.map(([value, label]) =>
+    `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
+}
+
+function patternRules() {
+  const texts = [
+    'Nenhum acesso no período. Aparece com o relatório de conclusão.',
+    'Dias desde o último acesso iguais ou superiores ao limite.',
+    'Pelo menos 3 semanas com acesso na primeira metade e, na segunda, no máximo metade desse número.',
+    'Acesso em menos de 40% das semanas, com mais da metade dos dias de acesso concentrados em até duas semanas.',
+    'Acesso em menos de 70% das semanas ou uma ausência igual ou superior ao limite.',
+    'Demais casos.',
+  ];
+  return `<details class="pattern-rules"><summary>Como os padrões são definidos</summary>
+    <ol>${PATTERNS.map(({ label }, index) => `<li><strong>${label}.</strong> ${texts[index]}</li>`).join('')}</ol>
+    <p>A primeira regra atendida define o padrão. Em períodos com um número ímpar de semanas, a semana do meio entra na primeira metade.</p></details>`;
+}
+
+function groupCards(c, state, copying = true) {
+  const card = row => `<li><strong>${uiEscape(shownName(row, state))}</strong><span>${studentReason(row, c.weeks)}</span></li>`;
+  const regular = c.students.filter(row => row.pattern === 'regular');
+  const groups = triageGroups(c);
+  return `<div class="triage-grid">${groups.map(group => `<section class="pattern-group">
+    <div class="group-head"><h2 class="tag ${group.tone}">${group.label}</h2><strong class="group-count">${group.students.length}</strong></div>
+    <p class="mediation">Sugestão: ${group.strategy}</p>
+    ${group.students.length ? `<ul class="student-cards">${group.students.map(card).join('')}</ul>` : '<p class="muted">Nenhum estudante neste grupo.</p>'}
+    ${copying ? `<button type="button" data-action="copy" data-group="${group.id}" aria-label="Copiar lista de ${group.label.toLowerCase()}"${group.students.length ? '' : ' disabled'}>Copiar lista</button>` : ''}
+    </section>`).join('')}</div>${copying ? `<details class="regular-list"><summary>Regular (${regular.length})</summary>
+    <ul class="student-cards">${regular.map(card).join('')}</ul></details>` : `<section class="regular-list"><h2>Regular (${regular.length})</h2>
+    <ul class="student-cards">${regular.map(card).join('')}</ul></section>`}`;
+}
+
+function triageView(state, c) {
+  return `<div class="stack triage">
+    <div class="section-head"><div><h1 data-view-heading tabindex="-1">Quem precisa de contato</h1><p class="muted">${periodLabel(c.period)}</p></div>
+      <label class="field">Limite de ausência <select id="absence-limit">${[7, 14, 21].map(limit =>
+        `<option value="${limit}"${c.absenceLimit === limit ? ' selected' : ''}>${limit} dias</option>`).join('')}</select></label></div>
+    ${classNumbers(c)}
+    <p class="reminder">${accessReminder}</p>
+    ${c.warnings.map(warning => `<p class="muted">${warning}</p>`).join('')}
+    ${groupCards(c, state)}
+    ${patternRules()}
+  </div>`;
+}
+
+async function copyGroup(id) {
+  const c = activeClass(currentState);
+  const group = triageGroups(c).find(group => group.id === id);
+  const list = group.students.map(row => shownName(row, currentState)).join('\n');
+  notice('');
+  try {
+    await navigator.clipboard.writeText(list);
+    notice('Lista copiada');
+  } catch {
+    const noticeBox = document.querySelector('#notice');
+    if (activeClass(currentState) !== c || currentState.view !== 'analysis' || currentState.tab !== 'triage') return;
+    notice('Selecione e copie a lista abaixo.');
+    const input = document.createElement('textarea');
+    input.readOnly = true;
+    input.rows = Math.min(group.students.length, 8);
+    input.setAttribute('aria-label', 'Lista de estudantes para copiar');
+    input.value = list;
+    noticeBox.append(input);
+    input.focus();
+    input.select();
+  }
+}
