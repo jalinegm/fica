@@ -161,3 +161,33 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .report-table th { min-width: 7rem; }
 .report-table th[scope="row"] { min-width: 12rem; }
 .chart + .table-scroll { border: 1px solid var(--border); border-radius: .45rem; }
+
+.export-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: end; margin: -.35rem 0 .9rem; }
+#print-report { display: none; }
+@page { size: A4; margin: 15mm; }
+@media print {
+  :root, body { background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body { font-size: 10pt; }
+  .top, .skip, .export-actions, button { display: none !important; }
+  .printing-class .shell { display: none; }
+  .printing-class #print-report { display: block; }
+  #print-report h1 { font-size: 18pt; }
+  #print-report h2 { font-size: 10pt; }
+  #print-report .print-heading { margin-bottom: 3mm; }
+  #print-report .class-numbers { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2mm; }
+  #print-report .class-numbers > div { padding: 1.5mm 2mm; }
+  #print-report .class-numbers dd { font-size: 12pt; }
+  #print-report .class-numbers dt { font-size: 8pt; }
+  #print-report .print-chart { margin: 2mm 0; break-inside: avoid; }
+  #print-report .print-chart svg { display: block; width: 100%; height: auto; }
+  #print-report .reminder { margin: 2mm 0 3mm; font-size: 9pt; }
+  #print-report .triage-grid { display: block; columns: 2; column-gap: 4mm; }
+  #print-report .pattern-group { display: block; break-inside: avoid-column; padding: 2mm; margin-bottom: 2mm; }
+  #print-report .group-head { margin-bottom: 1mm; break-after: avoid; }
+  #print-report .mediation { min-height: 0; margin-bottom: 1mm; font-size: 8pt; }
+  #print-report .student-cards { gap: 0; }
+  #print-report .student-cards li { display: block; padding: .5mm 0; border: 0; background: transparent; break-inside: avoid; }
+  #print-report .student-cards span { font-size: 8pt; margin-left: .45em; }
+  #print-report .regular-list { margin-top: 2mm; padding: 2mm 0; }
+  #print-report .regular-list .student-cards { display: block; columns: 2; }
+}

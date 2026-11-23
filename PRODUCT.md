@@ -39,7 +39,7 @@ Runs entirely in the teacher's browser: the log file, which contains students' n
 - Multiple offerings comparable side by side.
 - Students needing attention listed for contact.
 - Export CSV and print/PDF report.
-- Privacy: all processing local; option to anonymize names (codes) for reports and screenshots; IP addresses never shown.
+- Privacy: all processing local; teachers always see full student names (no codes in the tool; codes only in the TCC script outputs); IP addresses never shown.
 - Interface in Brazilian Portuguese.
 - Name: FICA — Frequência e Indicadores de Continuidade no AVA. License: CC BY-NC 4.0.
 - Undecided: thresholds defaults beyond 7/14/21 days; how teacher/tutor accounts are separated from students (from the log alone or with a participants list).

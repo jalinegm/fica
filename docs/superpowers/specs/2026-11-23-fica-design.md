@@ -20,7 +20,7 @@ Objetivos
 Não objetivos
 
 - Não se conecta ao Moodle nem usa API. Só lê arquivos exportados.
-- Não guarda nada entre sessões, além de preferências sem dados pessoais (limiares, anonimização).
+- Não guarda nada entre sessões, além de preferências sem dados pessoais (limite de ausência).
 - Não avalia aprendizagem nem dá nota.
 - Não envia mensagens; só copia a lista.
 
@@ -84,7 +84,7 @@ Lista da turma (minha decisão)
 - Sem arquivo de conclusão, a tela avisa: "Estudantes que nunca acessaram não aparecem. Carregue a conclusão de atividades para incluí-los." O padrão "Sem acesso" só existe com esse arquivo.
 - Não haverá importação da lista de participantes nesta versão.
 
-Códigos (minha decisão): E01, E02… atribuídos em ordem alfabética do nome completo, por turma. A ferramenta e o script do TCC geram os mesmos códigos.
+Nomes e códigos (decisão da autora, 23/11): na ferramenta, o professor sempre vê o nome completo do estudante, em todas as telas, na cópia, no CSV e na impressão. Não há códigos nem opção de anonimizar na ferramenta. Códigos E01, E02… (ordem alfabética do nome, por turma) existem só no script do TCC, que anonimiza as tabelas e figuras do relatório.
 
 Período da oferta
 
@@ -128,7 +128,7 @@ Barra verde do AVA com o nome da ferramenta ("FICA", subtítulo "Frequência e I
 
 **Conferência após carregar**: nome da turma (editável, sugerido pelo `Contexto do Evento`), período proposto com datas editáveis, número de estudantes e de pessoas da equipe, com link para revisar.
 
-**Quem precisa de contato** (abre nesta): quatro números da turma (estudantes, mediana de semanas com acesso, ausências acima do limite, afastados); colunas por padrão (Sem acesso/Afastamento, Queda progressiva, Acesso concentrado, Irregular), cada uma com contagem, estratégia sugerida, cartões de estudante (nome ou código e o dado que explica o padrão) e "Copiar lista". Regulares aparecem recolhidos. Lembrete fixo: acesso não é participação nem aprendizagem.
+**Quem precisa de contato** (abre nesta): quatro números da turma (estudantes, mediana de semanas com acesso, ausências acima do limite, afastados); colunas por padrão (Sem acesso/Afastamento, Queda progressiva, Acesso concentrado, Irregular), cada uma com contagem, estratégia sugerida, cartões de estudante (nome completo e o dado que explica o padrão) e "Copiar lista". Regulares aparecem recolhidos. Lembrete fixo: acesso não é participação nem aprendizagem.
 
 **Diário semanal**: matriz estudante × semana; cor = dias com acesso na semana (0 a 7, em 5 tons de verde, com legenda); última coluna com o padrão. Ordenar por nome, padrão ou semanas com acesso; filtrar por padrão. Clicar num estudante abre o detalhe: linha do tempo diária, indicadores e, se houver, atividades concluídas. Acima da matriz, gráfico de estudantes com acesso por semana. Tabela equivalente para leitores de tela.
 
@@ -142,7 +142,7 @@ Barra verde do AVA com o nome da ferramenta ("FICA", subtítulo "Frequência e I
 - um espaço para o vídeo da autora mostrando a exportação. O endereço do vídeo fica numa constante de configuração (`VIDEO_AJUDA`). Se for um arquivo no repositório (`ajuda/exportar.mp4`), toca com `<video>` e funciona offline. Se for um link do YouTube, aparece como link "Assistir ao vídeo" que abre em nova aba, para manter a página sem conexões externas. Com a constante vazia, o espaço não aparece;
 - perguntas frequentes curtas: por que estudantes que nunca acessaram não aparecem, o que significa cada padrão, se os dados saem do computador.
 
-**Exportar**: "Baixar CSV" (indicadores por estudante da turma ativa), "Imprimir / PDF" (folha de estilo de impressão com cabeçalho da turma, período, números, gráfico semanal e lista por padrão), "Mostrar códigos em vez de nomes" (E01, E02… em toda a tela, CSV e impressão).
+**Exportar**: "Baixar CSV" (indicadores por estudante da turma ativa), "Imprimir / PDF" (folha de estilo de impressão com cabeçalho da turma, período, números, gráfico semanal e lista por padrão com nomes).
 
 ## 7a. Gráficos: padrão Storytelling with Data (Cole Knaflic), pedido da autora
 

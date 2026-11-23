@@ -7,8 +7,9 @@ const tabs = [
   ['triage', 'Quem precisa de contato'], ['diary', 'Diário semanal'],
   ['compare', 'Comparar turmas'], ['completion', 'Conclusão de atividades'],
 ];
-const initialState = { classes: [], activeIndex: -1, tab: 'triage', anonymize: false, absenceLimit: 14, view: 'upload' };
-let currentState = initialState;
+const limitPreferenceKey = 'fica.limite-ausencia';
+const initialState = { classes: [], activeIndex: -1, tab: 'triage', absenceLimit: 14, view: 'upload' };
+let currentState = { ...initialState, absenceLimit: loadAbsenceLimit() };
 
 function matchingLogs(a, b) {
   return a && b && (a === b || (a.course === b.course && a.events.length === b.events.length &&
@@ -45,7 +46,11 @@ function navigation(state) {
     `<option value="${i}"${i === state.activeIndex ? ' selected' : ''}>${uiEscape(c.name)}</option>`).join('');
   return `<div class="nav-row"><div class="tabs" role="tablist" aria-label="Análises da turma">${tabs.map(([id, name]) =>
     `<button id="tab-${id}" type="button" role="tab" aria-controls="panel-${id}" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? 0 : -1}" data-tab="${id}">${name}</button>`).join('')}</div>
-    ${state.classes.length > 1 ? `<label class="class-select">Turma <select id="active-class">${choices}</select></label>` : ''}</div>`;
+    ${state.classes.length > 1 ? `<label class="class-select">Turma <select id="active-class">${choices}</select></label>` : ''}</div>
+    <div class="export-actions" aria-label="Exportar análise">
+      <button type="button" data-action="download">Baixar CSV</button>
+      <button type="button" data-action="print">Imprimir / PDF</button>
+    </div>`;
 }
 
 function uploadView() {
@@ -65,8 +70,8 @@ function uploadView() {
 
 function reviewView(c) {
   const participants = [
-    ...c.students.map(({ name, code }) => ({ name, label: currentState.anonymize ? code : name, staff: false })),
-    ...c.staff.map((name, index) => ({ name, label: currentState.anonymize ? 'Equipe ' + (index + 1) : name, staff: true })),
+    ...c.students.map(({ name }) => ({ label: name, staff: false })),
+    ...c.staff.map(name => ({ label: name, staff: true })),
   ];
   return `<section class="surface narrow stack"><h1 data-view-heading tabindex="-1">Conferir turma</h1>
     <p>${c.students.length} estudantes · ${c.staff.length} pessoas da equipe</p>
@@ -102,10 +107,10 @@ function helpView() {
 }
 
 function analysisView(state, c) {
-  if (state.tab === 'triage') return triageView(state, c);
+  if (state.tab === 'triage') return triageView(c);
   if (state.tab === 'diary') return diaryView(state, c);
   if (state.tab === 'compare') return compareView(state, c);
-  return completionView(state, c);
+  return completionView(c);
 }
 
 export function render(state) {
@@ -203,7 +208,7 @@ function submitReview(form) {
   }
   const c = completeOffer({ ...draft, name, period: { start, end }, overrides }, currentState.absenceLimit);
   const { state, replaced } = addClass(currentState, c);
-  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentCode: null });
+  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentIndex: null });
   if (replaced) notice('A turma que já estava aberta foi substituída.');
 }
 
@@ -215,7 +220,7 @@ function showDemo() {
     const c = completeOffer({ name, log: parseLog(demo.logText), completion: parseCompletion(demo.completionText), demo: true }, state.absenceLimit);
     state = addClass(state, c).state;
   }
-  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentCode: null });
+  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentIndex: null });
 }
 
 function openTab(tab) {
@@ -233,15 +238,17 @@ function bindPage() {
       case 'back': changeView(currentState.returnView ?? 'upload'); break;
       case 'upload': changeView('upload', { draft: null }); break;
       case 'demo': showDemo(); break;
+      case 'download': downloadCSV(activeClass(currentState)); break;
+      case 'print': window.print(); break;
       case 'copy': void copyGroup(button.dataset.group); break;
-      case 'diary-filter': update({ diaryFilter: button.dataset.filter, studentCode: null }, '#filter-' + button.dataset.filter); break;
+      case 'diary-filter': update({ diaryFilter: button.dataset.filter, studentIndex: null }, '#filter-' + button.dataset.filter); break;
       case 'student-detail': {
         const { scrollLeft, scrollTop } = document.querySelector('.matrix-scroll');
-        update({ studentCode: button.dataset.code }, '#detail-title');
+        update({ studentIndex: Number(button.dataset.index) }, '#detail-title');
         Object.assign(document.querySelector('.matrix-scroll'), { scrollLeft, scrollTop });
         break;
       }
-      case 'close-detail': update({ studentCode: null }, '#student-' + currentState.studentCode); break;
+      case 'close-detail': update({ studentIndex: null }, '#student-' + currentState.studentIndex); break;
     }
   });
   document.addEventListener('keydown', event => {
@@ -262,13 +269,14 @@ function bindPage() {
     if (event.target.id === 'diary-sort') update({ diarySort: event.target.value }, '#diary-sort');
     if (event.target.id === 'absence-limit') {
       const absenceLimit = Number(event.target.value);
+      saveAbsenceLimit(absenceLimit);
       const classes = currentState.classes.map(c => completeOffer(c, absenceLimit));
       notice('');
       update({ classes, absenceLimit }, '#absence-limit');
     }
     if (event.target.id === 'active-class') {
       notice('');
-      update({ activeIndex: Number(event.target.value), studentCode: null }, '#active-class');
+      update({ activeIndex: Number(event.target.value), studentIndex: null }, '#active-class');
     }
     if (event.target.type === 'file') fileError(event.target, '');
   });
@@ -289,6 +297,7 @@ function bindPage() {
       fileError(input, '');
     });
   }
+  window.addEventListener('beforeprint', () => printReport(activeClass(currentState)));
   render(currentState);
 }
 
@@ -315,7 +324,6 @@ export function studentReason(row, weeks) {
 
 const accessReminder = 'Acesso ao Moodle não é o mesmo que participação ou aprendizagem. Use estes sinais para conversar com o estudante.';
 const numberPt = value => value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
-const shownName = (row, state) => state.anonymize ? row.code : row.name;
 
 function classNumbers(c) {
   const summary = summarizeClass(c);
@@ -343,8 +351,8 @@ function patternRules() {
     <p>A primeira regra atendida define o padrão. Em períodos com um número ímpar de semanas, a semana do meio entra na primeira metade.</p></details>`;
 }
 
-function groupCards(c, state, copying = true) {
-  const card = row => `<li><strong>${uiEscape(shownName(row, state))}</strong><span>${studentReason(row, c.weeks)}</span></li>`;
+function groupCards(c, copying = true) {
+  const card = row => `<li><strong>${uiEscape(row.name)}</strong><span>${studentReason(row, c.weeks)}</span></li>`;
   const regular = c.students.filter(row => row.pattern === 'regular');
   const groups = triageGroups(c);
   return `<div class="triage-grid">${groups.map(group => `<section class="pattern-group">
@@ -357,7 +365,7 @@ function groupCards(c, state, copying = true) {
     <ul class="student-cards">${regular.map(card).join('')}</ul></section>`}`;
 }
 
-function triageView(state, c) {
+function triageView(c) {
   return `<div class="stack triage">
     <div class="section-head"><div><h1 data-view-heading tabindex="-1">Quem precisa de contato</h1><p class="muted">${periodLabel(c.period)}</p></div>
       <label class="field">Limite de ausência <select id="absence-limit">${[7, 14, 21].map(limit =>
@@ -365,7 +373,7 @@ function triageView(state, c) {
     ${classNumbers(c)}
     <p class="reminder">${accessReminder}</p>
     ${c.warnings.map(warning => `<p class="muted">${warning}</p>`).join('')}
-    ${groupCards(c, state)}
+    ${groupCards(c)}
     ${patternRules()}
   </div>`;
 }
@@ -373,7 +381,7 @@ function triageView(state, c) {
 async function copyGroup(id) {
   const c = activeClass(currentState);
   const group = triageGroups(c).find(group => group.id === id);
-  const list = group.students.map(row => shownName(row, currentState)).join('\n');
+  const list = group.students.map(row => row.name).join('\n');
   notice('');
   try {
     await navigator.clipboard.writeText(list);
@@ -431,7 +439,7 @@ function weeklyGraphic(c, print = false) {
     series.map(({ week, n, pct }) => ['S' + week, n, numberPt(pct) + '%'])));
 }
 
-function detailView(row, c, state) {
+function detailView(row, c) {
   if (!row) return '';
   const pattern = PATTERNS.find(item => item.id === row.pattern);
   const active = new Set(row.activeDays);
@@ -450,7 +458,7 @@ function detailView(row, c, state) {
   ];
   const completed = c.activities.filter((_, index) => row.done?.[index]);
   return `<section class="surface stack" aria-labelledby="detail-title">
-    <div class="section-head"><h2 id="detail-title" tabindex="-1">${uiEscape(shownName(row, state))}</h2>
+    <div class="section-head"><h2 id="detail-title" tabindex="-1">${uiEscape(row.name)}</h2>
     <button type="button" data-action="close-detail">Fechar detalhe</button></div>
     <p>${tagFor(row.pattern)} ${pattern.strategy}</p>
     <div class="stack"><h3>Linha do tempo diária</h3><ul class="daily-track" aria-label="Dias do período">${days}</ul>
@@ -463,7 +471,7 @@ function detailView(row, c, state) {
 }
 
 function diaryView(state, c) {
-  const { diarySort = 'name', diaryFilter = 'all', studentCode } = state;
+  const { diarySort = 'name', diaryFilter = 'all', studentIndex } = state;
   const students = c.students.filter(row => diaryFilter === 'all' || row.pattern === diaryFilter);
   const order = PATTERNS.map(({ id }) => id);
   if (diarySort === 'pattern') students.sort((a, b) => order.indexOf(a.pattern) - order.indexOf(b.pattern));
@@ -472,7 +480,7 @@ function diaryView(state, c) {
   const sorts = [['name', 'Nome'], ['pattern', 'Padrão'], ['weeks', 'Semanas com acesso']];
   const headings = Array.from({ length: c.weeks }, (_, i) => `<th scope="col">S${i + 1}</th>`).join('');
   const rows = students.map(row => `<tr><th scope="row"><button type="button" class="link" data-action="student-detail"
-    id="student-${row.code}" data-code="${row.code}">${uiEscape(shownName(row, state))}</button></th>
+    id="student-${c.students.indexOf(row)}" data-index="${c.students.indexOf(row)}">${uiEscape(row.name)}</button></th>
     ${row.weeklyDays.map((days, i) => {
       const label = `S${i + 1}: ${days} ${days === 1 ? 'dia' : 'dias'} com acesso`;
       return `<td class="t${tintLevel(days)}" title="${label}" aria-label="${label}">${days}</td>`;
@@ -490,7 +498,7 @@ function diaryView(state, c) {
     ${students.length ? `<div class="table-scroll matrix-scroll" tabindex="0" role="region" aria-label="Matriz de acesso semanal">
       <table class="matrix" aria-label="Dias com acesso em cada semana"><thead><tr><th scope="col">Estudante</th>${headings}<th scope="col">Padrão</th></tr></thead>
       <tbody>${rows}</tbody></table></div>` : '<p class="surface">Nenhum estudante neste filtro.</p>'}
-    ${detailView(students.find(row => row.code === studentCode), c, state)}
+    ${detailView(students.find(row => row === c.students[studentIndex]), c)}
   </div>`;
 }
 
@@ -559,7 +567,7 @@ export function spearman(points) {
   return sumX && sumY ? cov / Math.sqrt(sumX * sumY) : 0;
 }
 
-function completionView(state, c) {
+function completionView(c) {
   const heading = '<h1 data-view-heading tabindex="-1">Conclusão de atividades</h1>';
   if (!c.hasCompletion) return `<section class="surface stack">${heading}
     <p>No Moodle, abra <strong>Relatórios → Conclusão de atividades</strong> e baixe o CSV. Carregue-o junto com o log da turma.</p>
@@ -568,7 +576,7 @@ function completionView(state, c) {
   if (!eligible.length) return `<section class="surface stack">${heading}<p>O relatório está sem registros de conclusão para os estudantes desta turma.</p></section>`;
   const points = eligible.map(row => ({
     x: row.weeksActive, y: 100 * row.completed / row.completionTotal,
-    label: shownName(row, state), highlight: row.pattern !== 'regular',
+    label: row.name, highlight: row.pattern !== 'regular',
   }));
   const title = spearman(points) >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
     : 'Semanas com acesso e atividades concluídas variaram de forma independente';
@@ -587,4 +595,63 @@ function completionView(state, c) {
     ${chartFigure(byActivity, 'Conclusão por atividade', reportTable('Conclusão por atividade',
       ['Atividade', 'Percentual de estudantes'], bars.map(bar => [bar.label, numberPt(bar.value) + '%'])))}
   </div>`;
+}
+
+function loadAbsenceLimit() {
+  try {
+    const value = Number(localStorage.getItem(limitPreferenceKey));
+    if ([7, 14, 21].includes(value)) return value;
+  } catch {
+    // O armazenamento pode estar indisponível no modo offline ou privado.
+  }
+  return 14;
+}
+
+function saveAbsenceLimit(value) {
+  try {
+    localStorage.setItem(limitPreferenceKey, String(value));
+  } catch {
+    // O limite continua valendo até fechar a página.
+  }
+}
+
+function exportField(value) {
+  let field = typeof value === 'number' ? String(value).replace('.', ',') : String(value ?? '');
+  if (typeof value === 'string' && /^[\s\uFEFF]*[=+\-@]/.test(field)) field = "'" + field;
+  return /[";\r\n]/.test(field) ? '"' + field.replaceAll('"', '""') + '"' : field;
+}
+
+export function toCSV(c) {
+  const headers = ['Estudante', 'Acessos', 'Dias com acesso', 'Semanas com acesso', 'Total de semanas',
+    'Maior ausência (dias)', 'Dias desde o último acesso', 'Ausências 7+', 'Ausências 14+', 'Ausências 21+',
+    'Atividades concluídas', 'Total de atividades', 'Padrão', 'Estratégia sugerida'];
+  const rows = c.students.map(row => {
+    const pattern = PATTERNS.find(item => item.id === row.pattern);
+    return [row.name, row.accesses, row.daysActive, row.weeksActive, c.weeks, row.longestAbsence,
+      row.daysSinceLast, row.gaps7, row.gaps14, row.gaps21, row.completed, row.completionTotal, pattern.label, pattern.strategy];
+  });
+  return '\uFEFF' + [headers, ...rows].map(row => row.map(exportField).join(';')).join('\r\n') + '\r\n';
+}
+
+function downloadCSV(c) {
+  const url = URL.createObjectURL(new Blob([toCSV(c)], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'fica_' + (c.name.replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 100) || 'turma') + '.csv';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function printReport(c) {
+  const report = document.querySelector('#print-report');
+  report.innerHTML = c ? `<div class="print-heading"><p>FICA · Relatório da turma</p>
+    <h1>${uiEscape(c.name)}</h1><p>${periodLabel(c.period)} · Data de referência ${c.refDate.split('-').reverse().join('/')}</p>
+    ${c.demo ? '<p>Dados fictícios de demonstração</p>' : ''}</div>
+    ${classNumbers(c)}
+    <figure class="print-chart">${weeklyGraphic(c, true)}</figure>
+    <p class="reminder">${accessReminder}</p>
+    ${groupCards(c, false)}` : '';
+  document.body?.classList.toggle('printing-class', Boolean(c));
 }
