@@ -192,3 +192,98 @@ export function assignCodes(names) {
     .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
     .map((name, index) => [name, 'E' + String(index + 1).padStart(width, '0')]));
 }
+
+const dayMs = 86_400_000;
+
+export function dayKey(date) {
+  return [String(date.getFullYear()).padStart(4, '0'), date.getMonth() + 1, date.getDate()]
+    .map(value => String(value).padStart(2, '0')).join('-');
+}
+
+function calendarTime(day) {
+  return Date.parse(day + 'T00:00:00Z');
+}
+
+export function daysBetween(a, b) {
+  return (calendarTime(b) - calendarTime(a)) / dayMs;
+}
+
+function shiftDay(day, offset) {
+  return new Date(calendarTime(day) + offset * dayMs).toISOString().slice(0, 10);
+}
+
+function weekStart(day) {
+  const weekday = new Date(calendarTime(day)).getUTCDay();
+  return shiftDay(day, -((weekday + 6) % 7));
+}
+
+export function proposePeriod(events, students) {
+  const enrolled = new Set(students.map(normalizeName));
+  const weeks = new Map();
+  let earliest = null;
+  for (const event of events) {
+    const day = dayKey(event.time);
+    if (earliest === null || day < earliest) earliest = day;
+    const key = normalizeName(event.user);
+    if (!isAccess(event) || !enrolled.has(key)) continue;
+    const monday = weekStart(day);
+    if (!weeks.has(monday)) weeks.set(monday, new Set());
+    weeks.get(monday).add(key);
+  }
+  const active = [...weeks.keys()].sort();
+  const continuous = active.filter(week => weeks.get(week).size >= 0.2 * enrolled.size);
+  const selected = continuous.length ? continuous : active;
+  const start = selected[0] ?? weekStart(earliest ?? dayKey(new Date()));
+  return { start, end: shiftDay(selected.at(-1) ?? start, 6) };
+}
+
+export function buildClass({ name, log, completion = null, period = null, overrides = {}, absenceLimit = 14 }) {
+  const people = identifyPeople(log.events, completion, overrides);
+  period ??= proposePeriod(log.events, people.students);
+  const { start, end } = period;
+  const firstMonday = weekStart(start);
+  const weeks = 1 + Math.floor(daysBetween(firstMonday, end) / 7);
+  const lastLogDay = log.events.reduce((last, { time }) => {
+    const day = dayKey(time);
+    return day > last ? day : last;
+  }, '');
+  const refDate = lastLogDay && lastLogDay < end ? lastLogDay : end;
+  const byStudent = new Map(people.students.map(name => [normalizeName(name), []]));
+  for (const event of log.events) {
+    if (!isAccess(event)) continue;
+    const day = dayKey(event.time);
+    if (day >= start && day <= refDate) byStudent.get(normalizeName(event.user))?.push(day);
+  }
+  const completedByName = new Map(completion?.students.map(row => [normalizeName(row.name), row.done]));
+  const activities = completion?.activities ?? [];
+  const students = [...assignCodes(people.students)].map(([name, code]) => {
+    const accesses = byStudent.get(normalizeName(name));
+    const activeDays = [...new Set(accesses)].sort();
+    const weeklyDays = Array(weeks).fill(0);
+    for (const day of activeDays) weeklyDays[Math.floor(daysBetween(firstMonday, day) / 7)]++;
+    const half = Math.ceil(weeks / 2);
+    const firstHalfWeeks = weeklyDays.slice(0, half).filter(Boolean).length;
+    const secondHalfWeeks = weeklyDays.slice(half).filter(Boolean).length;
+    const daysSinceLast = activeDays.length ? daysBetween(activeDays.at(-1), refDate) : null;
+    const absences = activeDays.length
+      ? [daysBetween(start, activeDays[0]), daysSinceLast,
+        ...activeDays.slice(1).map((day, i) => daysBetween(activeDays[i], day) - 1)]
+      : [Math.max(0, daysBetween(start, refDate) + 1)];
+    const done = completedByName.get(normalizeName(name));
+    return {
+      name, code, accesses: accesses.length, daysActive: activeDays.length,
+      weeksActive: firstHalfWeeks + secondHalfWeeks, weeklyDays, activeDays, firstHalfWeeks, secondHalfWeeks,
+      longestAbsence: absences.reduce((max, days) => Math.max(max, days), 0), daysSinceLast,
+      gaps7: absences.filter(days => days >= 7).length,
+      gaps14: absences.filter(days => days >= 14).length,
+      gaps21: absences.filter(days => days >= 21).length,
+      completed: done ? done.filter(Boolean).length : null,
+      completionTotal: done ? activities.length : null, done: done ?? null,
+    };
+  });
+  return {
+    name, period, weeks, refDate, students, staff: people.staff, source: people.source,
+    hasCompletion: Boolean(completion), activities, absenceLimit,
+    warnings: completion ? [] : ['Estudantes que nunca acessaram não aparecem. Carregue a conclusão de atividades para incluí-los.'],
+  };
+}
