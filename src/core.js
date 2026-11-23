@@ -118,3 +118,77 @@ export function parseLog(text) {
   const course = [...choices].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
   return { course, language, events };
 }
+
+export function parseCompletion(text) {
+  const [first = [], ...rows] = reportRows(text);
+  const header = first.map(value => value.trim().toLowerCase());
+  if (Object.values(logHeaders).some(names => names.slice(0, 3).every(name => header.includes(name)))) {
+    throw new FormatError('is-log');
+  }
+  if (!isCompletionHeader(header) || (header.length - 2) % 2 !== 0) {
+    throw new FormatError('not-csv');
+  }
+  const activities = first.slice(2).filter((_, i) => i % 2 === 0).map(collapseSpaces);
+  const students = rows.filter(row => row[0]?.trim()).map(row => ({
+    name: row[0].trim(),
+    email: row[1]?.trim() ?? '',
+    done: activities.map((_, i) => ['Concluído', 'Completed'].includes(row[2 + i * 2]?.trim())),
+  }));
+  return { activities, students };
+}
+
+function collapseSpaces(value) {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+export function normalizeName(value) {
+  return collapseSpaces(value).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+}
+
+export const STAFF_EVENTS = [
+  'O envio foi avaliado.', 'Módulo de curso atualizado', 'Módulo do curso criado',
+  'Item de nota atualizado', 'Relatório de log visto', 'Formulário de notas visualizado',
+  'Seção do curso atualizada', 'Submission graded.', 'Course module updated',
+  'Course module created', 'Grade item updated', 'Log report viewed',
+];
+
+function isAccess(event) {
+  return event.origin === 'web' || event.origin === 'ws';
+}
+
+export function identifyPeople(events, completion, overrides = {}) {
+  const names = new Map();
+  const enrolled = new Set();
+  const staff = new Set();
+  const access = new Set();
+  for (const { name } of completion?.students ?? []) {
+    const key = normalizeName(name);
+    if (!key || names.has(key)) continue;
+    names.set(key, name);
+    enrolled.add(key);
+  }
+  for (const event of events) {
+    const key = normalizeName(event.user);
+    if (!key) continue;
+    if (!names.has(key)) names.set(key, event.user);
+    if (STAFF_EVENTS.includes(event.event)) staff.add(key);
+    if (isAccess(event)) access.add(key);
+  }
+  const staffOverrides = new Set((overrides.staff ?? []).map(normalizeName));
+  const studentOverrides = new Set((overrides.students ?? []).map(normalizeName));
+  const result = { students: [], staff: [], source: completion ? 'completion' : 'heuristic' };
+  for (const [key, name] of names) {
+    if (staffOverrides.has(key)) result.staff.push(name);
+    else if (studentOverrides.has(key)) result.students.push(name);
+    else if (completion ? enrolled.has(key) : access.has(key) && !staff.has(key)) result.students.push(name);
+    else if (completion || staff.has(key)) result.staff.push(name);
+  }
+  return result;
+}
+
+export function assignCodes(names) {
+  const width = Math.max(2, String(names.length).length);
+  return new Map([...names]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+    .map((name, index) => [name, 'E' + String(index + 1).padStart(width, '0')]));
+}
