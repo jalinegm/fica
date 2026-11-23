@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Js0LxlINpmON0JfbUUQw/wGcJ6y56Lj8vKc22Tm88O0='; style-src 'sha256-d/ZGf/4IVG84Y9n4rYU3y9Vm0tHt3jpZEWJsYLjeV6I='; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dH08JMQgtRy3mvD8DTgwzQygiSI7BxT8f/sUe2A01LE='; style-src 'sha256-u4ieYflJfAXX9CDJsypM8NOwHsRau/dPPZdOU1VOMAo='; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>FICA · Frequência e Indicadores de Continuidade no AVA</title>
   <link rel="icon" href="data:,">
   <style>
@@ -82,7 +82,7 @@ button.link { border: 0; background: transparent; padding-inline: .15rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
 .muted { color: var(--muted); }
 .error { color: var(--red); }
-.notice, .demo-band { padding: .6rem .85rem; margin-bottom: 1rem; border-left: 3px solid var(--green); background: var(--green-bg); }
+.notice, .demo-band { padding: .6rem .85rem; margin-bottom: 1rem; border-radius: .45rem; background: var(--green-bg); }
 summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .people { display: grid; gap: .25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); margin-block-start: .5rem; }
 .people label { display: flex; gap: .5rem; align-items: center; min-height: 2rem; overflow-wrap: anywhere; }
@@ -109,7 +109,7 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .class-numbers > div { display: flex; flex-direction: column-reverse; justify-content: start; padding: .65rem .9rem; gap: .1rem; background: var(--white); border: 1px solid var(--border); border-radius: .45rem; }
 .class-numbers dt { font-size: .86rem; color: var(--muted); }
 .class-numbers dd { margin: 0; font-size: 1.45rem; font-weight: 750; color: var(--green); font-variant-numeric: tabular-nums; }
-.reminder { border-left: 3px solid var(--green); padding: .5rem .85rem; background: #f9f7ec; }
+.reminder { border: 1px solid var(--border); border-radius: .45rem; padding: .5rem .85rem; background: #f9f7ec; }
 .triage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; align-items: start; }
 .pattern-group { background: var(--cream-deep); border-radius: .45rem; padding: .85rem; display: grid; gap: .65rem; }
 .group-head { display: flex; align-items: center; justify-content: space-between; gap: .4rem; }
@@ -584,13 +584,17 @@ function titleWeekly(series) {
   const first = series[0]?.pct ?? 0;
   const last = series.at(-1)?.pct ?? 0;
   if (last <= first - 20) return `O acesso caiu de ${Math.round(first)}% na semana 1 para ${Math.round(last)}% na última semana`;
-  return 'A maior parte da turma acessou o curso em todas as semanas';
+  if (!series.length) return 'Sem semanas de acesso para analisar';
+  const majority = series.filter(row => row.pct > 50).length;
+  return majority === series.length ? 'A maior parte da turma acessou o curso em todas as semanas'
+    : `Em ${majority} de ${series.length} semanas, mais da metade da turma acessou o curso`;
 }
 
 function titleCompare(entries) {
   if (entries.length < 2) return titleWeekly(entries[0]?.series ?? []);
-  const finalMean = ({ series }) => mean(series.slice(Math.ceil(series.length / 2)).map(row => row.pct));
-  const [leader] = [...entries].sort((a, b) => finalMean(b) - finalMean(a));
+  const finalMean = ({ series }) => mean(series.slice(Math.min(Math.ceil(series.length / 2), series.length - 1)).map(row => row.pct));
+  const [leader, next] = entries.map(entry => ({ ...entry, score: finalMean(entry) })).sort((a, b) => b.score - a.score);
+  if (leader.score === next.score) return 'Houve empate na maior média de acesso na parte final das ofertas';
   return `${leader.name} manteve mais estudantes acessando até o fim da oferta`;
 }
 
@@ -829,6 +833,7 @@ const tabs = [
 const limitPreferenceKey = 'fica.limite-ausencia';
 const initialState = { classes: [], activeIndex: -1, tab: 'triage', absenceLimit: 14, view: 'upload' };
 let currentState = { ...initialState, absenceLimit: loadAbsenceLimit() };
+let preservedForm = null;
 
 function matchingLogs(a, b) {
   return a && b && (a === b || (a.course === b.course && a.events.length === b.events.length &&
@@ -872,7 +877,7 @@ function navigation(state) {
     </div>`;
 }
 
-function uploadView() {
+function uploadView(state) {
   const field = (id, label) => `<div class="drop field" data-drop="${id}">
     <label for="${id}">${label}</label><input type="file" id="${id}" accept=".csv,text/csv" aria-describedby="${id}-hint ${id}-error">
     <small id="${id}-hint" class="muted">Arraste o CSV ou escolha o arquivo.</small>
@@ -883,7 +888,8 @@ function uploadView() {
       <div class="drop-grid">${field('log-file', 'Log do curso (obrigatório)')}${field('completion-file', 'Conclusão de atividades (opcional)')}</div>
       <div class="field"><label for="class-name">Nome da turma (opcional)</label><input id="class-name" placeholder="Ex.: Introdução à Informática · 2026/1"></div>
       <div class="actions"><button type="submit" class="primary">Analisar</button>${helpButton()}
-        <button type="button" class="link" data-action="demo">Ver exemplo com dados fictícios</button></div>
+        <button type="button" class="link" data-action="demo">Ver exemplo com dados fictícios</button>
+        ${state.classes.length ? '<button type="button" data-action="return-analysis">Voltar à análise</button>' : ''}</div>
     </form></section>`;
 }
 
@@ -945,7 +951,7 @@ function render(state) {
       `<section role="tabpanel" id="panel-${state.tab}" aria-labelledby="tab-${state.tab}">${analysisView(state, c)}</section>` +
       tabs.filter(([id]) => id !== state.tab).map(([id]) =>
         `<section role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}" hidden></section>`).join('');
-  } else main.innerHTML = uploadView();
+  } else main.innerHTML = uploadView(state);
 }
 
 function update(next, focus) {
@@ -986,8 +992,8 @@ async function submitUpload(form) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
   const results = await Promise.allSettled([fromFile(logInput, parseLog), fromFile(completionInput, parseCompletion)]);
-  if (!form.isConnected) return;
   button.disabled = false;
+  if (!form.isConnected) return;
   const errorMessages = ['Não foi possível ler o log do curso. Confira Relatórios → Logs.',
     'Não foi possível ler a conclusão. Baixe o CSV em Relatórios → Conclusão de atividades.'];
   const inputs = [logInput, completionInput];
@@ -1053,9 +1059,22 @@ function bindPage() {
     if (!button) return;
     if (button.dataset.tab) openTab(button.dataset.tab);
     switch (button.dataset.action) {
-      case 'help': if (currentState.view !== 'help') changeView('help', { returnView: currentState.view }); break;
-      case 'back': changeView(currentState.returnView ?? 'upload'); break;
-      case 'upload': changeView('upload', { draft: null }); break;
+      case 'help':
+        if (currentState.view === 'help') break;
+        preservedForm = document.querySelector('main form');
+        changeView('help', { returnView: currentState.view });
+        break;
+      case 'back': {
+        changeView(currentState.returnView ?? 'upload');
+        if (preservedForm) document.querySelector('main form')?.replaceWith(preservedForm);
+        preservedForm = null;
+        break;
+      }
+      case 'upload':
+        preservedForm = null;
+        changeView('upload', { draft: null });
+        break;
+      case 'return-analysis': changeView('analysis'); break;
       case 'demo': showDemo(); break;
       case 'download': downloadCSV(activeClass(currentState)); break;
       case 'print': window.print(); break;
@@ -1397,8 +1416,10 @@ function completionView(c) {
     x: row.weeksActive, y: 100 * row.completed / row.completionTotal,
     label: row.name, highlight: row.pattern !== 'regular',
   }));
-  const title = spearman(points) >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
-    : 'Semanas com acesso e atividades concluídas variaram de forma independente';
+  const association = spearman(points);
+  const title = association >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
+    : association <= -0.3 ? 'Quem acessou mais semanas concluiu menos atividades'
+      : 'Semanas com acesso e percentual de atividades concluídas por estudante';
   const scatter = scatterChart({ title, subtitle: 'Verde indica padrões de atenção · ' + periodLabel(c.period), points,
     xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas' });
   const ordered = c.activities.map((label, i) => ({ label,

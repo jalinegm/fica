@@ -73,7 +73,7 @@ button.link { border: 0; background: transparent; padding-inline: .15rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
 .muted { color: var(--muted); }
 .error { color: var(--red); }
-.notice, .demo-band { padding: .6rem .85rem; margin-bottom: 1rem; border-left: 3px solid var(--green); background: var(--green-bg); }
+.notice, .demo-band { padding: .6rem .85rem; margin-bottom: 1rem; border-radius: .45rem; background: var(--green-bg); }
 summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .people { display: grid; gap: .25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); margin-block-start: .5rem; }
 .people label { display: flex; gap: .5rem; align-items: center; min-height: 2rem; overflow-wrap: anywhere; }
@@ -100,7 +100,7 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .class-numbers > div { display: flex; flex-direction: column-reverse; justify-content: start; padding: .65rem .9rem; gap: .1rem; background: var(--white); border: 1px solid var(--border); border-radius: .45rem; }
 .class-numbers dt { font-size: .86rem; color: var(--muted); }
 .class-numbers dd { margin: 0; font-size: 1.45rem; font-weight: 750; color: var(--green); font-variant-numeric: tabular-nums; }
-.reminder { border-left: 3px solid var(--green); padding: .5rem .85rem; background: #f9f7ec; }
+.reminder { border: 1px solid var(--border); border-radius: .45rem; padding: .5rem .85rem; background: #f9f7ec; }
 .triage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; align-items: start; }
 .pattern-group { background: var(--cream-deep); border-radius: .45rem; padding: .85rem; display: grid; gap: .65rem; }
 .group-head { display: flex; align-items: center; justify-content: space-between; gap: .4rem; }

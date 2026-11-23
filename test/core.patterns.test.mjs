@@ -39,3 +39,10 @@ test('weekly and comparison titles describe the sustained decline or the final d
   assert.equal(titleCompare([{ name: 'A', series: series([80, 20]) }, { name: 'B', series: series([10, 80]) }]),
     'B manteve mais estudantes acessando até o fim da oferta');
 });
+
+test('short and recovering series produce titles supported by the data', () => {
+  const series = values => values.map((pct, i) => ({ week: i + 1, pct }));
+  assert.equal(titleCompare([{ name: 'A', series: series([25]) }, { name: 'B', series: series([100]) }]),
+    'B manteve mais estudantes acessando até o fim da oferta');
+  assert.equal(titleWeekly(series([80, 30, 80])), 'Em 2 de 3 semanas, mais da metade da turma acessou o curso');
+});

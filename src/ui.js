@@ -10,6 +10,7 @@ const tabs = [
 const limitPreferenceKey = 'fica.limite-ausencia';
 const initialState = { classes: [], activeIndex: -1, tab: 'triage', absenceLimit: 14, view: 'upload' };
 let currentState = { ...initialState, absenceLimit: loadAbsenceLimit() };
+let preservedForm = null;
 
 function matchingLogs(a, b) {
   return a && b && (a === b || (a.course === b.course && a.events.length === b.events.length &&
@@ -53,7 +54,7 @@ function navigation(state) {
     </div>`;
 }
 
-function uploadView() {
+function uploadView(state) {
   const field = (id, label) => `<div class="drop field" data-drop="${id}">
     <label for="${id}">${label}</label><input type="file" id="${id}" accept=".csv,text/csv" aria-describedby="${id}-hint ${id}-error">
     <small id="${id}-hint" class="muted">Arraste o CSV ou escolha o arquivo.</small>
@@ -64,7 +65,8 @@ function uploadView() {
       <div class="drop-grid">${field('log-file', 'Log do curso (obrigatório)')}${field('completion-file', 'Conclusão de atividades (opcional)')}</div>
       <div class="field"><label for="class-name">Nome da turma (opcional)</label><input id="class-name" placeholder="Ex.: Introdução à Informática · 2026/1"></div>
       <div class="actions"><button type="submit" class="primary">Analisar</button>${helpButton()}
-        <button type="button" class="link" data-action="demo">Ver exemplo com dados fictícios</button></div>
+        <button type="button" class="link" data-action="demo">Ver exemplo com dados fictícios</button>
+        ${state.classes.length ? '<button type="button" data-action="return-analysis">Voltar à análise</button>' : ''}</div>
     </form></section>`;
 }
 
@@ -126,7 +128,7 @@ export function render(state) {
       `<section role="tabpanel" id="panel-${state.tab}" aria-labelledby="tab-${state.tab}">${analysisView(state, c)}</section>` +
       tabs.filter(([id]) => id !== state.tab).map(([id]) =>
         `<section role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}" hidden></section>`).join('');
-  } else main.innerHTML = uploadView();
+  } else main.innerHTML = uploadView(state);
 }
 
 function update(next, focus) {
@@ -167,8 +169,8 @@ async function submitUpload(form) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
   const results = await Promise.allSettled([fromFile(logInput, parseLog), fromFile(completionInput, parseCompletion)]);
-  if (!form.isConnected) return;
   button.disabled = false;
+  if (!form.isConnected) return;
   const errorMessages = ['Não foi possível ler o log do curso. Confira Relatórios → Logs.',
     'Não foi possível ler a conclusão. Baixe o CSV em Relatórios → Conclusão de atividades.'];
   const inputs = [logInput, completionInput];
@@ -234,9 +236,22 @@ function bindPage() {
     if (!button) return;
     if (button.dataset.tab) openTab(button.dataset.tab);
     switch (button.dataset.action) {
-      case 'help': if (currentState.view !== 'help') changeView('help', { returnView: currentState.view }); break;
-      case 'back': changeView(currentState.returnView ?? 'upload'); break;
-      case 'upload': changeView('upload', { draft: null }); break;
+      case 'help':
+        if (currentState.view === 'help') break;
+        preservedForm = document.querySelector('main form');
+        changeView('help', { returnView: currentState.view });
+        break;
+      case 'back': {
+        changeView(currentState.returnView ?? 'upload');
+        if (preservedForm) document.querySelector('main form')?.replaceWith(preservedForm);
+        preservedForm = null;
+        break;
+      }
+      case 'upload':
+        preservedForm = null;
+        changeView('upload', { draft: null });
+        break;
+      case 'return-analysis': changeView('analysis'); break;
       case 'demo': showDemo(); break;
       case 'download': downloadCSV(activeClass(currentState)); break;
       case 'print': window.print(); break;
@@ -578,8 +593,10 @@ function completionView(c) {
     x: row.weeksActive, y: 100 * row.completed / row.completionTotal,
     label: row.name, highlight: row.pattern !== 'regular',
   }));
-  const title = spearman(points) >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
-    : 'Semanas com acesso e atividades concluídas variaram de forma independente';
+  const association = spearman(points);
+  const title = association >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
+    : association <= -0.3 ? 'Quem acessou mais semanas concluiu menos atividades'
+      : 'Semanas com acesso e percentual de atividades concluídas por estudante';
   const scatter = scatterChart({ title, subtitle: 'Verde indica padrões de atenção · ' + periodLabel(c.period), points,
     xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas' });
   const ordered = c.activities.map((label, i) => ({ label,

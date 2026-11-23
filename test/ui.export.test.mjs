@@ -23,7 +23,8 @@ test('the built classic script renders all demo tabs and prepares a named print 
   const listeners = {};
   const document = {
     querySelector(selector) {
-      if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', focus() {} });
+      if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', focus() {},
+        replaceWith(form) { nodes.set(selector, form); } });
       return nodes.get(selector);
     },
     addEventListener(name, listener) { listeners[name] = listener; },
@@ -45,6 +46,17 @@ test('the built classic script renders all demo tabs and prepares a named print 
     assert.match(nodes.get('main').innerHTML, pattern);
     assert.match(nodes.get('main').innerHTML, /role="tabpanel"/);
   }
+  click({ action: 'upload' });
+  assert.match(nodes.get('main').innerHTML, /Voltar à análise/);
+  const originalForm = document.querySelector('main form');
+  originalForm.selectedFile = 'CSV fictício';
+  click({ action: 'help' });
+  nodes.delete('main form');
+  click({ action: 'back' });
+  assert.equal(document.querySelector('main form'), originalForm);
+  assert.equal(originalForm.selectedFile, 'CSV fictício');
+  click({ action: 'return-analysis' });
+  assert.match(nodes.get('main').innerHTML, /Copiar lista/);
   click({ action: 'print' });
   const printed = nodes.get('#print-report').innerHTML;
   assert.match(printed, /Data de referência/);

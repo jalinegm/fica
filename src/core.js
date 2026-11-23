@@ -361,13 +361,17 @@ export function titleWeekly(series) {
   const first = series[0]?.pct ?? 0;
   const last = series.at(-1)?.pct ?? 0;
   if (last <= first - 20) return `O acesso caiu de ${Math.round(first)}% na semana 1 para ${Math.round(last)}% na última semana`;
-  return 'A maior parte da turma acessou o curso em todas as semanas';
+  if (!series.length) return 'Sem semanas de acesso para analisar';
+  const majority = series.filter(row => row.pct > 50).length;
+  return majority === series.length ? 'A maior parte da turma acessou o curso em todas as semanas'
+    : `Em ${majority} de ${series.length} semanas, mais da metade da turma acessou o curso`;
 }
 
 export function titleCompare(entries) {
   if (entries.length < 2) return titleWeekly(entries[0]?.series ?? []);
-  const finalMean = ({ series }) => mean(series.slice(Math.ceil(series.length / 2)).map(row => row.pct));
-  const [leader] = [...entries].sort((a, b) => finalMean(b) - finalMean(a));
+  const finalMean = ({ series }) => mean(series.slice(Math.min(Math.ceil(series.length / 2), series.length - 1)).map(row => row.pct));
+  const [leader, next] = entries.map(entry => ({ ...entry, score: finalMean(entry) })).sort((a, b) => b.score - a.score);
+  if (leader.score === next.score) return 'Houve empate na maior média de acesso na parte final das ofertas';
   return `${leader.name} manteve mais estudantes acessando até o fim da oferta`;
 }
 
