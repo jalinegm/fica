@@ -1,5 +1,5 @@
-import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass } from './core.js';
-import { escapeMarkup } from './charts.js';
+import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass, weeklySeries, titleWeekly, sustainedDeclineWeek, daysBetween, shiftDay } from './core.js';
+import { escapeMarkup, lineChart } from './charts.js';
 import { generateDemo } from './demo.js';
 
 const VIDEO_AJUDA = '';
@@ -103,6 +103,7 @@ function helpView() {
 
 function analysisView(state, c) {
   if (state.tab === 'triage') return triageView(state, c);
+  if (state.tab === 'diary') return diaryView(state, c);
   const label = tabs.find(([id]) => state.tab === id)[1];
   return `<section class="surface"><h1 data-view-heading tabindex="-1">${label}</h1><p>${c.students.length} estudantes · ${periodLabel(c.period)}</p></section>`;
 }
@@ -202,7 +203,7 @@ function submitReview(form) {
   }
   const c = completeOffer({ ...draft, name, period: { start, end }, overrides }, currentState.absenceLimit);
   const { state, replaced } = addClass(currentState, c);
-  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null });
+  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentCode: null });
   if (replaced) notice('A turma que já estava aberta foi substituída.');
 }
 
@@ -214,7 +215,7 @@ function showDemo() {
     const c = completeOffer({ name, log: parseLog(demo.logText), completion: parseCompletion(demo.completionText), demo: true }, state.absenceLimit);
     state = addClass(state, c).state;
   }
-  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null });
+  changeView('analysis', { ...state, view: 'analysis', tab: 'triage', draft: null, studentCode: null });
 }
 
 function openTab(tab) {
@@ -233,6 +234,14 @@ function bindPage() {
       case 'upload': changeView('upload', { draft: null }); break;
       case 'demo': showDemo(); break;
       case 'copy': void copyGroup(button.dataset.group); break;
+      case 'diary-filter': update({ diaryFilter: button.dataset.filter, studentCode: null }, '#filter-' + button.dataset.filter); break;
+      case 'student-detail': {
+        const { scrollLeft, scrollTop } = document.querySelector('.matrix-scroll');
+        update({ studentCode: button.dataset.code }, '#detail-title');
+        Object.assign(document.querySelector('.matrix-scroll'), { scrollLeft, scrollTop });
+        break;
+      }
+      case 'close-detail': update({ studentCode: null }, '#student-' + currentState.studentCode); break;
     }
   });
   document.addEventListener('keydown', event => {
@@ -250,6 +259,7 @@ function bindPage() {
     else submitReview(event.target);
   });
   document.addEventListener('change', event => {
+    if (event.target.id === 'diary-sort') update({ diarySort: event.target.value }, '#diary-sort');
     if (event.target.id === 'absence-limit') {
       const absenceLimit = Number(event.target.value);
       const classes = currentState.classes.map(c => completeOffer(c, absenceLimit));
@@ -258,7 +268,7 @@ function bindPage() {
     }
     if (event.target.id === 'active-class') {
       notice('');
-      update({ activeIndex: Number(event.target.value) }, '#active-class');
+      update({ activeIndex: Number(event.target.value), studentCode: null }, '#active-class');
     }
     if (event.target.type === 'file') fileError(event.target, '');
   });
@@ -381,4 +391,105 @@ async function copyGroup(id) {
     input.focus();
     input.select();
   }
+}
+
+export function tintLevel(days) {
+  if (days <= 2) return days;
+  return days <= 4 ? 3 : 4;
+}
+
+function tagFor(pattern) {
+  const { label, tone } = PATTERNS.find(({ id }) => id === pattern);
+  return `<span class="tag ${tone}">${label}</span>`;
+}
+
+function reportTable(caption, headings, rows) {
+  return `<div class="table-scroll" tabindex="0" role="region" aria-label="${uiEscape(caption)}">
+    <table class="report-table"><caption>${uiEscape(caption)}</caption><thead><tr>${headings.map(heading =>
+      `<th scope="col">${uiEscape(heading)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(([label, ...values]) => `<tr><th scope="row">${uiEscape(label)}</th>${values.map(value =>
+        `<td>${uiEscape(value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function chartFigure(svg, label, equivalent) {
+  return `<figure class="chart"><div class="chart-scroll" tabindex="0" role="region" aria-label="${uiEscape(label)}">${svg}</div>
+    <details class="chart-data"><summary>Ver tabela · ${uiEscape(label)}</summary>${equivalent}</details></figure>`;
+}
+
+function weeklyGraphic(c, print = false) {
+  const series = weeklySeries(c);
+  const week = sustainedDeclineWeek(series);
+  const title = c.students.length ? titleWeekly(series) : 'A turma está sem estudantes identificados';
+  const svg = lineChart({
+    title, subtitle: 'Percentual de estudantes com acesso por semana · ' + periodLabel(c.period),
+    series: [{ label: 'Turma', values: series.map(row => row.pct), highlight: true }],
+    xLabels: series.map(row => 'S' + row.week), print,
+    annotation: week === null || !c.students.length ? undefined : { index: week - 1, text: 'Menos de 50%' },
+  });
+  if (print) return svg;
+  return chartFigure(svg, 'Acesso semanal', reportTable('Acesso semanal', ['Semana', 'Estudantes com acesso', 'Percentual'],
+    series.map(({ week, n, pct }) => ['S' + week, n, numberPt(pct) + '%'])));
+}
+
+function detailView(row, c, state) {
+  if (!row) return '';
+  const pattern = PATTERNS.find(item => item.id === row.pattern);
+  const active = new Set(row.activeDays);
+  const days = Array.from({ length: daysBetween(c.period.start, c.period.end) + 1 }, (_, i) => {
+    const key = shiftDay(c.period.start, i);
+    const [status, css] = key > c.refDate ? ['fora da janela observada', 'unobserved']
+      : active.has(key) ? ['com acesso', 'visited'] : ['sem acesso', ''];
+    const label = key.split('-').reverse().join('/') + ' · ' + status;
+    return `<li class="${css}" title="${label}" aria-label="${label}"></li>`;
+  }).join('');
+  const measures = [
+    ['Acessos', row.accesses], ['Dias com acesso', row.daysActive], ['Semanas com acesso', row.weeksActive + ' de ' + c.weeks],
+    ['Maior ausência (dias)', row.longestAbsence], ['Dias desde o último acesso', row.daysSinceLast ?? '—'],
+    ['Ausências de 7+ dias', row.gaps7], ['Ausências de 14+ dias', row.gaps14], ['Ausências de 21+ dias', row.gaps21],
+    ['Semanas com acesso na 1ª metade', row.firstHalfWeeks], ['Semanas com acesso na 2ª metade', row.secondHalfWeeks],
+  ];
+  const completed = c.activities.filter((_, index) => row.done?.[index]);
+  return `<section class="surface stack" aria-labelledby="detail-title">
+    <div class="section-head"><h2 id="detail-title" tabindex="-1">${uiEscape(shownName(row, state))}</h2>
+    <button type="button" data-action="close-detail">Fechar detalhe</button></div>
+    <p>${tagFor(row.pattern)} ${pattern.strategy}</p>
+    <div class="stack"><h3>Linha do tempo diária</h3><ul class="daily-track" aria-label="Dias do período">${days}</ul>
+      <p class="muted">Verde indica acesso. Creme indica dia sem acesso. Tracejado indica dia fora da janela observada.</p></div>
+    ${reportTable('Indicadores individuais', ['Indicador', 'Valor'], measures)}
+    ${c.hasCompletion ? `<div><h3>Atividades concluídas${row.done ? ' (' + row.completed + ' de ' + row.completionTotal + ')' : ''}</h3>
+      ${completed.length ? `<ul>${completed.map(activity => `<li>${uiEscape(activity)}</li>`).join('')}</ul>`
+        : `<p>${row.done ? 'Nenhuma atividade concluída.' : 'Sem registro no relatório de conclusão.'}</p>`}</div>` : ''}
+  </section>`;
+}
+
+function diaryView(state, c) {
+  const { diarySort = 'name', diaryFilter = 'all', studentCode } = state;
+  const students = c.students.filter(row => diaryFilter === 'all' || row.pattern === diaryFilter);
+  const order = PATTERNS.map(({ id }) => id);
+  if (diarySort === 'pattern') students.sort((a, b) => order.indexOf(a.pattern) - order.indexOf(b.pattern));
+  if (diarySort === 'weeks') students.sort((a, b) => b.weeksActive - a.weeksActive);
+  const filters = [{ id: 'all', label: 'Todos' }, ...PATTERNS];
+  const sorts = [['name', 'Nome'], ['pattern', 'Padrão'], ['weeks', 'Semanas com acesso']];
+  const headings = Array.from({ length: c.weeks }, (_, i) => `<th scope="col">S${i + 1}</th>`).join('');
+  const rows = students.map(row => `<tr><th scope="row"><button type="button" class="link" data-action="student-detail"
+    id="student-${row.code}" data-code="${row.code}">${uiEscape(shownName(row, state))}</button></th>
+    ${row.weeklyDays.map((days, i) => {
+      const label = `S${i + 1}: ${days} ${days === 1 ? 'dia' : 'dias'} com acesso`;
+      return `<td class="t${tintLevel(days)}" title="${label}" aria-label="${label}">${days}</td>`;
+    }).join('')}<td>${tagFor(row.pattern)}</td></tr>`).join('');
+  return `<div class="stack"><div><h1 data-view-heading tabindex="-1">Diário semanal</h1>
+    <p class="muted">${periodLabel(c.period)}</p></div>
+    ${weeklyGraphic(c)}
+    <div class="section-head"><h2>Dias com acesso por estudante</h2><label class="field">Ordenar por
+      <select id="diary-sort">${sorts.map(([value, label]) =>
+        `<option value="${value}"${value === diarySort ? ' selected' : ''}>${label}</option>`).join('')}</select></label></div>
+    <div class="filters" role="group" aria-label="Filtrar por padrão">
+      ${filters.map(({ id, label }) => `<button type="button" id="filter-${id}" data-action="diary-filter" data-filter="${id}" aria-pressed="${diaryFilter === id}">${label}</button>`).join('')}</div>
+    <div class="matrix-key"><strong>Dias com acesso na semana</strong>
+      ${['0', '1', '2', '3–4', '5–7'].map((label, i) => `<span class="key-chip t${i}">${label}</span>`).join('')}</div>
+    ${students.length ? `<div class="table-scroll matrix-scroll" tabindex="0" role="region" aria-label="Matriz de acesso semanal">
+      <table class="matrix" aria-label="Dias com acesso em cada semana"><thead><tr><th scope="col">Estudante</th>${headings}<th scope="col">Padrão</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>` : '<p class="surface">Nenhum estudante neste filtro.</p>'}
+    ${detailView(students.find(row => row.code === studentCode), c, state)}
+  </div>`;
 }

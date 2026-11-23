@@ -208,7 +208,7 @@ export function daysBetween(a, b) {
   return (calendarTime(b) - calendarTime(a)) / dayMs;
 }
 
-function shiftDay(day, offset) {
+export function shiftDay(day, offset) {
   return new Date(calendarTime(day) + offset * dayMs).toISOString().slice(0, 10);
 }
 
