@@ -7,6 +7,7 @@
   --cream-deep: #efeccf;
   --border: #d9d4b8;
   --ink: #1f2a24;
+  --ink-on-ava: #030a05;
   --muted: #4d5b52;
   --context: #9aa0a6;
   --red: #a2281a;
@@ -49,10 +50,10 @@ button.link { border: 0; background: transparent; padding-inline: .15rem; }
 .top { background: var(--ava); }
 .top-inner, .shell { width: min(100%, 100rem); margin-inline: auto; padding-inline: clamp(1rem, 2.25vw, 2rem); }
 .top-inner { display: flex; align-items: center; gap: 1rem 1.5rem; min-height: 4.25rem; padding-block: .65rem; }
-.brand { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; color: #07180e; }
+.brand { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; color: var(--ink-on-ava); }
 .brand strong { color: #fff; font-size: 1.55rem; letter-spacing: .04em; font-weight: 750; }
 .brand span, .top-class { font-size: .9rem; font-weight: 650; }
-.top-class { color: #07180e; overflow-wrap: anywhere; }
+.top-class { color: var(--ink-on-ava); overflow-wrap: anywhere; }
 .top-actions { display: flex; gap: .5rem; margin-left: auto; flex-shrink: 0; }
 .shell { padding-block: 1rem 3rem; }
 .nav-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem 1rem; border-bottom: 2px solid var(--ava); margin-bottom: 1rem; }
@@ -126,8 +127,8 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 }
 
 .chart { margin: 0; min-width: 0; background: var(--white); border-radius: .45rem; padding: .65rem; }
-.chart-scroll { overflow-x: auto; }
-.chart svg { display: block; width: min(100%, 64rem); min-width: 36rem; height: auto; }
+.chart-scroll { max-height: min(36rem, 75vh); overflow: auto; }
+.chart svg { display: block; width: 100%; min-width: 46rem; height: auto; }
 .chart-data { border-top: 1px solid var(--border); padding: .55rem .45rem .2rem; }
 .chart-data[open] summary { margin-bottom: .6rem; }
 .table-scroll { max-width: 100%; overflow: auto; background: var(--white); }
@@ -152,7 +153,7 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .t1 { background: #e3efdb; }
 .t2 { background: #c3dfb8; }
 .t3 { background: #8cc495; }
-.t4 { background: var(--ava); color: #04170b; }
+.t4 { background: var(--ava); color: var(--ink-on-ava); }
 .daily-track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, 1.1rem); gap: .25rem; }
 .daily-track li { aspect-ratio: 1; background: #f7f5e6; border: 1px solid #9c9d88; border-radius: .15rem; }
 .daily-track .visited { background: var(--ava); border-color: var(--green); }

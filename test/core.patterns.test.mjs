@@ -26,6 +26,7 @@ test('summary calculates even medians and weekly series count each student once'
       weeklyDays: [2, ...Array(7).fill(0)], completed: weeksActive, completionTotal: 8 })) };
   const summary = summarizeClass(c);
   assert.equal(summary.medianWeeksActive, 5);
+  assert.equal(summarizeClass({ ...c, students: c.students.slice(0, 3).concat({ ...c.students[0], weeksActive: 3 }) }).meanWeeksActive, 3.8);
   assert.equal(summary.medianCompletionPct, 62.5);
   assert.equal(summary.patternPct.regular, 100);
   assert.deepEqual(weeklySeries(c).slice(0, 2), [{ week: 1, n: 4, pct: 100 }, { week: 2, n: 0, pct: 0 }]);

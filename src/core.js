@@ -333,7 +333,7 @@ export function summarizeClass(c) {
   const completion = c.students.filter(row => row.completionTotal).map(row => 100 * row.completed / row.completionTotal);
   return {
     name: c.name, n, staffCount: c.staff.length, start: c.period.start, end: c.period.end, weeks: c.weeks,
-    medianWeeksActive: median(values('weeksActive')), meanWeeksActive: mean(values('weeksActive')),
+    medianWeeksActive: median(values('weeksActive')), meanWeeksActive: Math.round(10 * mean(values('weeksActive'))) / 10,
     medianDaysActive: median(values('daysActive')), medianLongestAbsence: median(values('longestAbsence')),
     patternCounts, patternPct,
     studentsWithGap7: values('gaps7').filter(Boolean).length,

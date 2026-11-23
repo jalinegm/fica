@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { buildClass, parseLog, parseCompletion } from '../src/core.js';
-import { generateDemo } from '../src/demo.js';
+import { DEMO_OFFERINGS, generateDemo } from '../src/demo.js';
 import { toCSV } from '../src/ui.js';
 
 test('the browser CSV includes full names, a BOM and 14 columns without student codes', () => {
@@ -45,6 +45,11 @@ test('the built classic script renders all demo tabs and prepares a named print 
     click({ tab });
     assert.match(nodes.get('main').innerHTML, pattern);
     assert.match(nodes.get('main').innerHTML, /role="tabpanel"/);
+    if (tab !== 'triage') {
+      const widths = [...nodes.get('main').innerHTML.matchAll(/viewBox="0 0 (\d+) \d+"/g)];
+      assert.equal(widths.length, tab === 'diary' ? 1 : 2);
+      assert.ok(widths.every(([, width]) => width === '1000'));
+    }
   }
   click({ action: 'upload' });
   assert.match(nodes.get('main').innerHTML, /Voltar à análise/);
@@ -60,7 +65,8 @@ test('the built classic script renders all demo tabs and prepares a named print 
   click({ action: 'print' });
   const printed = nodes.get('#print-report').innerHTML;
   assert.match(printed, /Data de referência/);
-  assert.match(printed, /<svg/);
-  assert.match(printed, /Ana Ribeiro/);
+  assert.match(printed, /<svg[^>]*viewBox="0 0 760 /);
+  const demo = generateDemo(DEMO_OFFERINGS[1]);
+  assert.ok(printed.includes(parseCompletion(demo.completionText).students[0].name));
   assert.doesNotMatch(printed, /Copiar lista|\bE\d{2,}\b/);
 });

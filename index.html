@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dH08JMQgtRy3mvD8DTgwzQygiSI7BxT8f/sUe2A01LE='; style-src 'sha256-u4ieYflJfAXX9CDJsypM8NOwHsRau/dPPZdOU1VOMAo='; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zhseL1bgdIXjAPiBunl1hiHFDYaZmizXgaOHZZYTGF0='; style-src 'sha256-/fN9DWAVEQtMq610bMMBqu4dAMHD2qJ0SjlfNmUwDHw='; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>FICA · Frequência e Indicadores de Continuidade no AVA</title>
   <link rel="icon" href="data:,">
   <style>
@@ -16,6 +16,7 @@
   --cream-deep: #efeccf;
   --border: #d9d4b8;
   --ink: #1f2a24;
+  --ink-on-ava: #030a05;
   --muted: #4d5b52;
   --context: #9aa0a6;
   --red: #a2281a;
@@ -58,10 +59,10 @@ button.link { border: 0; background: transparent; padding-inline: .15rem; }
 .top { background: var(--ava); }
 .top-inner, .shell { width: min(100%, 100rem); margin-inline: auto; padding-inline: clamp(1rem, 2.25vw, 2rem); }
 .top-inner { display: flex; align-items: center; gap: 1rem 1.5rem; min-height: 4.25rem; padding-block: .65rem; }
-.brand { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; color: #07180e; }
+.brand { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; color: var(--ink-on-ava); }
 .brand strong { color: #fff; font-size: 1.55rem; letter-spacing: .04em; font-weight: 750; }
 .brand span, .top-class { font-size: .9rem; font-weight: 650; }
-.top-class { color: #07180e; overflow-wrap: anywhere; }
+.top-class { color: var(--ink-on-ava); overflow-wrap: anywhere; }
 .top-actions { display: flex; gap: .5rem; margin-left: auto; flex-shrink: 0; }
 .shell { padding-block: 1rem 3rem; }
 .nav-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem 1rem; border-bottom: 2px solid var(--ava); margin-bottom: 1rem; }
@@ -135,8 +136,8 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 }
 
 .chart { margin: 0; min-width: 0; background: var(--white); border-radius: .45rem; padding: .65rem; }
-.chart-scroll { overflow-x: auto; }
-.chart svg { display: block; width: min(100%, 64rem); min-width: 36rem; height: auto; }
+.chart-scroll { max-height: min(36rem, 75vh); overflow: auto; }
+.chart svg { display: block; width: 100%; min-width: 46rem; height: auto; }
 .chart-data { border-top: 1px solid var(--border); padding: .55rem .45rem .2rem; }
 .chart-data[open] summary { margin-bottom: .6rem; }
 .table-scroll { max-width: 100%; overflow: auto; background: var(--white); }
@@ -161,7 +162,7 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .t1 { background: #e3efdb; }
 .t2 { background: #c3dfb8; }
 .t3 { background: #8cc495; }
-.t4 { background: var(--ava); color: #04170b; }
+.t4 { background: var(--ava); color: var(--ink-on-ava); }
 .daily-track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, 1.1rem); gap: .25rem; }
 .daily-track li { aspect-ratio: 1; background: #f7f5e6; border: 1px solid #9c9d88; border-radius: .15rem; }
 .daily-track .visited { background: var(--ava); border-color: var(--green); }
@@ -556,7 +557,7 @@ function summarizeClass(c) {
   const completion = c.students.filter(row => row.completionTotal).map(row => 100 * row.completed / row.completionTotal);
   return {
     name: c.name, n, staffCount: c.staff.length, start: c.period.start, end: c.period.end, weeks: c.weeks,
-    medianWeeksActive: median(values('weeksActive')), meanWeeksActive: mean(values('weeksActive')),
+    medianWeeksActive: median(values('weeksActive')), meanWeeksActive: Math.round(10 * mean(values('weeksActive'))) / 10,
     medianDaysActive: median(values('daysActive')), medianLongestAbsence: median(values('longestAbsence')),
     patternCounts, patternPct,
     studentsWithGap7: values('gaps7').filter(Boolean).length,
@@ -644,6 +645,9 @@ function makeChart({ title, subtitle, width, height }, draw) {
 
 function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit = '%', annotation,
   width = 760, height = 236, print = false }) {
+  const labelGap = 15;
+  const plotted = series.filter(item => item.values.length);
+  if (!print) height = Math.max(height, 48 + (plotted.length - 1) * labelGap);
   const margin = Math.min(width * 0.4, Math.max(84, ...series.map(item => item.label.length * 7.5 + 24)));
   const left = 48;
   const right = Math.max(left + 1, width - margin);
@@ -659,20 +663,27 @@ function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit = '%', 
     const axes = `<path d="M${left} 20V${bottom}H${right}" fill="none" stroke="${chartAxes}"/>` +
       svgText(left - 7, 24, yMax + yUnit, `text-anchor="end" fill="${chartMuted}"`) +
       svgText(left - 7, bottom + 4, 0 + yUnit, `text-anchor="end" fill="${chartMuted}"`) + ticks;
-    const entries = series.filter(item => item.values.length).map(item => ({ ...item, labelY: y(item.values.at(-1)) }));
+    const entries = plotted.map(item => ({ ...item, labelY: y(item.values.at(-1)) }));
+    const ordered = [...entries].sort((a, b) => a.labelY - b.labelY);
     let previous = -3;
-    for (const item of [...entries].sort((a, b) => a.labelY - b.labelY)) {
-      item.labelY = Math.max(item.labelY, previous + 15);
+    for (const item of ordered) {
+      item.labelY = Math.max(item.labelY, previous + labelGap);
       previous = item.labelY;
     }
     const overflow = Math.max(0, previous - bottom);
+    if (!print && overflow) {
+      ordered.at(-1).labelY = bottom;
+      for (let i = ordered.length - 2; i >= 0; i--) {
+        ordered[i].labelY = Math.min(ordered[i].labelY, ordered[i + 1].labelY - labelGap);
+      }
+    }
     const lines = entries.map(({ label, values, highlight, labelY }) => {
       const color = highlight ? chartFocus(print) : chartContext;
       const points = values.map((value, index) => x(index) + ',' + y(value)).join(' ');
       const endX = x(values.length - 1);
       const endY = y(values.at(-1));
       const labelX = right + 12;
-      labelY -= overflow;
+      if (print) labelY -= overflow;
       return `<polyline points="${points}" stroke="${color}" fill="none" stroke-width="${highlight ? 3 : 2}"/><circle cx="${endX}" cy="${endY}" r="3" fill="${color}"/>` +
         (Math.abs(labelY - endY) > 3 || endX < right ? `<path d="M${endX + 4} ${endY} L${labelX - 4} ${labelY}" fill="none" stroke="${color}"/>` : '') +
         svgText(labelX, labelY + 4, label, `fill="${highlight ? '#1f5f3b' : chartMuted}"`);
@@ -689,8 +700,7 @@ function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit = '%', 
   });
 }
 
-function barChartH({ title, subtitle, bars, unit = '', print = false }) {
-  const width = 760;
+function barChartH({ title, subtitle, bars, unit = '', width = 760, print = false }) {
   const left = 252;
   const ordered = [...bars].sort((a, b) => a.value - b.value);
   const rows = ordered.map(bar => ({ ...bar, lines: chartLines(bar.label, 32) }));
@@ -710,8 +720,7 @@ function barChartH({ title, subtitle, bars, unit = '', print = false }) {
   });
 }
 
-function patternBars({ title, subtitle, rows, print = false }) {
-  const width = 820;
+function patternBars({ title, subtitle, rows, width = 820, print = false }) {
   const left = 205;
   const span = width - left - 15;
   const colors = print ? ['#222', '#444', '#606060', '#808080', '#aaa', '#e1e1e1']
@@ -739,8 +748,7 @@ function patternBars({ title, subtitle, rows, print = false }) {
     }).join(''));
 }
 
-function scatterChart({ title, subtitle, points, xLabel, yLabel, print = false }) {
-  const width = 680;
+function scatterChart({ title, subtitle, points, xLabel, yLabel, width = 680, print = false }) {
   const height = 250;
   const left = 54;
   const right = width - 30;
@@ -766,6 +774,11 @@ const demoLastNames = ['Ribeiro', 'Alves', 'Pereira', 'Andrade', 'Martins', 'Cos
 const demoActivities = ['Apresentação no fórum', 'Questionário de informática', 'Pesquisa na web\nAtividade prática',
   'Editor de texto', 'Planilhas', 'Projeto final'];
 
+const DEMO_OFFERINGS = [
+  { seed: 2025, turma: '2025/1', start: '2025-03-03', weeks: 18, students: 36, profile: 'declining' },
+  { seed: 2026, turma: '2026/1', start: '2026-03-02', weeks: 18, students: 40 },
+];
+
 function mulberry32(seed) {
   return () => {
     let value = seed += 0x6D2B79F5;
@@ -779,11 +792,21 @@ function demoCSV(rows) {
   return '\uFEFF' + rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(',')).join('\r\n');
 }
 
-function generateDemo({ seed, turma, start, weeks, students }) {
+function generateDemo({ seed, turma, start, weeks, students, profile = 'stable' }) {
   const random = mulberry32(seed);
+  const surnamesByFirstName = demoFirstNames.map(() => {
+    const surnames = [...demoLastNames];
+    for (let i = surnames.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [surnames[i], surnames[j]] = [surnames[j], surnames[i]];
+    }
+    return surnames;
+  });
   const dateAt = offset => new Date(Date.parse(start + 'T00:00:00Z') + offset * 86_400_000).toISOString().slice(0, 10);
   const end = weeks - 1;
   const half = Math.ceil(weeks / 2);
+  const declining = profile === 'declining';
+  const [regular, withdrawal, decline, concentrated] = declining ? [0.31, 0.62, 0.82, 0.89] : [0.55, 0.67, 0.79, 0.87];
   const log = [['Hora', 'Nome completo', 'Usuário afetado', 'Contexto do Evento', 'Componente', 'Nome do evento', 'Descrição', 'Origem', 'endereço IP']];
   const course = 'Curso: Introdução à Informática · ' + turma + ' (dados fictícios)';
   const addEvent = (day, name, event = 'Curso visualizado', origin = 'web') => {
@@ -794,18 +817,22 @@ function generateDemo({ seed, turma, start, weeks, students }) {
   };
   const completion = [['', 'Endereço de email', ...demoActivities.flatMap(activity => [activity, ''])]];
   for (let i = 0; i < students; i++) {
-    const first = demoFirstNames[i % demoFirstNames.length];
-    const last = demoLastNames[Math.floor(i / demoFirstNames.length) % demoLastNames.length];
+    const firstIndex = i % demoFirstNames.length;
+    const first = demoFirstNames[firstIndex];
+    const last = surnamesByFirstName[firstIndex][Math.floor(i / demoFirstNames.length) % demoLastNames.length];
     const batch = Math.floor(i / (demoFirstNames.length * demoLastNames.length));
     const name = first + ' ' + last + (batch ? ' ' + (batch + 1) : '');
     const fraction = (i + 0.5) / students;
     const schedule = [];
+    const stopsAt = declining ? Math.min(weeks - 3, half + 1 + i % 4) : weeks - 3;
     for (let week = 0; week < weeks; week++) {
-      if (fraction < 0.55 && (week === 0 || week === end || week % 2 === 0 || random() < 0.82)) schedule.push(week);
-      else if (fraction >= 0.55 && fraction < 0.67 && week < weeks - 3) schedule.push(week);
-      else if (fraction >= 0.67 && fraction < 0.79 && (week < half || (end - week) % 3 === 0)) schedule.push(week);
-      else if (fraction >= 0.79 && fraction < 0.87 && (week === 2 || week === end)) schedule.push(week);
-      else if (fraction >= 0.87 && fraction < 0.95 && (end - week) % 2 === 0) schedule.push(week);
+      if (fraction < regular && (week === 0 || week === end || week % 2 === 0 || random() < 0.82)) schedule.push(week);
+      else if (fraction >= regular && fraction < withdrawal && week < stopsAt) schedule.push(week);
+      else if (fraction >= withdrawal && fraction < decline) {
+        const returns = declining ? (week - half + i % 5) % 6 === 0 : (end - week) % 3 === 0;
+        if (week < half || returns) schedule.push(week);
+      } else if (fraction >= decline && fraction < concentrated && (week === 2 || week === end)) schedule.push(week);
+      else if (fraction >= concentrated && fraction < 0.95 && (end - week) % 2 === 0) schedule.push(week);
     }
     for (const week of schedule) {
       const day = week * 7 + 2;
@@ -826,6 +853,7 @@ function generateDemo({ seed, turma, start, weeks, students }) {
 
 
 const VIDEO_AJUDA = '';
+const webChartWidth = 1000;
 const tabs = [
   ['triage', 'Quem precisa de contato'], ['diary', 'Diário semanal'],
   ['compare', 'Comparar turmas'], ['completion', 'Conclusão de atividades'],
@@ -1039,9 +1067,10 @@ function submitReview(form) {
 
 function showDemo() {
   let state = currentState;
-  for (const [seed, start, students] of [[2025, '2025-03-03', 36], [2026, '2026-03-02', 40]]) {
-    const name = 'MSI ' + seed + '/1 (dados fictícios)';
-    const demo = generateDemo({ seed, turma: 'MSI ' + seed + '/1', start, weeks: 18, students });
+  for (const offering of DEMO_OFFERINGS) {
+    const turma = 'MSI ' + offering.turma;
+    const name = turma + ' (dados fictícios)';
+    const demo = generateDemo({ ...offering, turma });
     const c = completeOffer({ name, log: parseLog(demo.logText), completion: parseCompletion(demo.completionText), demo: true }, state.absenceLimit);
     state = addClass(state, c).state;
   }
@@ -1269,7 +1298,7 @@ function weeklyGraphic(c, print = false) {
   const svg = lineChart({
     title, subtitle: 'Percentual de estudantes com acesso por semana · ' + periodLabel(c.period),
     series: [{ label: 'Turma', values: series.map(row => row.pct), highlight: true }],
-    xLabels: series.map(row => 'S' + row.week), print,
+    xLabels: series.map(row => 'S' + row.week), width: print ? undefined : webChartWidth, print,
     annotation: week === null || !c.students.length ? undefined : { index: week - 1, text: 'Menos de 50%' },
   });
   if (print) return svg;
@@ -1363,9 +1392,10 @@ function compareView(state, c) {
   const names = entries.map(entry => entry.name);
   const weeks = Array.from({ length: Math.max(...state.classes.map(offer => offer.weeks)) }, (_, i) => 'S' + (i + 1));
   const weekly = lineChart({ title: titleCompare(entries), subtitle: 'Percentual de estudantes com acesso por semana · ofertas alinhadas por semana',
-    series: entries.map(e => ({ label: e.name, values: e.series.map(row => row.pct), highlight: e.highlight })), xLabels: weeks });
+    series: entries.map(e => ({ label: e.name, values: e.series.map(row => row.pct), highlight: e.highlight })), xLabels: weeks, width: webChartWidth });
   const patterns = patternBars({ title: titlePatterns(summaries[state.activeIndex]),
-    subtitle: 'Distribuição percentual dos padrões de acesso por oferta', rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })) });
+    subtitle: 'Distribuição percentual dos padrões de acesso por oferta', width: webChartWidth,
+    rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })) });
   return `<div class="stack">${heading}
     ${chartFigure(weekly, 'Acesso semanal por turma', reportTable('Percentual por semana', ['Semana', ...names], weeks.map((week, i) =>
       [week, ...entries.map(entry => entry.series[i] ? numberPt(entry.series[i].pct) + '%' : '—')])))}
@@ -1421,14 +1451,15 @@ function completionView(c) {
     : association <= -0.3 ? 'Quem acessou mais semanas concluiu menos atividades'
       : 'Semanas com acesso e percentual de atividades concluídas por estudante';
   const scatter = scatterChart({ title, subtitle: 'Verde indica padrões de atenção · ' + periodLabel(c.period), points,
-    xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas' });
+    xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas', width: webChartWidth });
   const ordered = c.activities.map((label, i) => ({ label,
     value: Math.round(1000 * eligible.filter(row => row.done[i]).length / eligible.length) / 10,
   })).sort((a, b) => a.value - b.value);
   const bars = ordered.map((bar, i) => ({ ...bar, highlight: i < 3 }));
   const lowest = bars[0];
   const byActivity = barChartH({ title: lowest.label + ' teve a menor conclusão (' + numberPt(lowest.value) + '%)',
-    subtitle: 'Percentual dos ' + eligible.length + ' estudantes presentes na análise e no relatório de conclusão', bars, unit: '%' });
+    subtitle: 'Percentual dos ' + eligible.length + ' estudantes presentes na análise e no relatório de conclusão',
+    bars, unit: '%', width: webChartWidth });
   return `<div class="stack">${heading}
     ${chartFigure(scatter, 'Acesso e conclusão por estudante', reportTable('Acesso e conclusão por estudante',
       ['Estudante', 'Semanas com acesso', 'Atividades concluídas'], points.map(p => [p.label, p.x, numberPt(p.y) + '%'])))}

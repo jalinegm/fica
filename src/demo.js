@@ -4,6 +4,11 @@ const demoLastNames = ['Ribeiro', 'Alves', 'Pereira', 'Andrade', 'Martins', 'Cos
 const demoActivities = ['Apresentação no fórum', 'Questionário de informática', 'Pesquisa na web\nAtividade prática',
   'Editor de texto', 'Planilhas', 'Projeto final'];
 
+export const DEMO_OFFERINGS = [
+  { seed: 2025, turma: '2025/1', start: '2025-03-03', weeks: 18, students: 36, profile: 'declining' },
+  { seed: 2026, turma: '2026/1', start: '2026-03-02', weeks: 18, students: 40 },
+];
+
 function mulberry32(seed) {
   return () => {
     let value = seed += 0x6D2B79F5;
@@ -17,11 +22,21 @@ function demoCSV(rows) {
   return '\uFEFF' + rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(',')).join('\r\n');
 }
 
-export function generateDemo({ seed, turma, start, weeks, students }) {
+export function generateDemo({ seed, turma, start, weeks, students, profile = 'stable' }) {
   const random = mulberry32(seed);
+  const surnamesByFirstName = demoFirstNames.map(() => {
+    const surnames = [...demoLastNames];
+    for (let i = surnames.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [surnames[i], surnames[j]] = [surnames[j], surnames[i]];
+    }
+    return surnames;
+  });
   const dateAt = offset => new Date(Date.parse(start + 'T00:00:00Z') + offset * 86_400_000).toISOString().slice(0, 10);
   const end = weeks - 1;
   const half = Math.ceil(weeks / 2);
+  const declining = profile === 'declining';
+  const [regular, withdrawal, decline, concentrated] = declining ? [0.31, 0.62, 0.82, 0.89] : [0.55, 0.67, 0.79, 0.87];
   const log = [['Hora', 'Nome completo', 'Usuário afetado', 'Contexto do Evento', 'Componente', 'Nome do evento', 'Descrição', 'Origem', 'endereço IP']];
   const course = 'Curso: Introdução à Informática · ' + turma + ' (dados fictícios)';
   const addEvent = (day, name, event = 'Curso visualizado', origin = 'web') => {
@@ -32,18 +47,22 @@ export function generateDemo({ seed, turma, start, weeks, students }) {
   };
   const completion = [['', 'Endereço de email', ...demoActivities.flatMap(activity => [activity, ''])]];
   for (let i = 0; i < students; i++) {
-    const first = demoFirstNames[i % demoFirstNames.length];
-    const last = demoLastNames[Math.floor(i / demoFirstNames.length) % demoLastNames.length];
+    const firstIndex = i % demoFirstNames.length;
+    const first = demoFirstNames[firstIndex];
+    const last = surnamesByFirstName[firstIndex][Math.floor(i / demoFirstNames.length) % demoLastNames.length];
     const batch = Math.floor(i / (demoFirstNames.length * demoLastNames.length));
     const name = first + ' ' + last + (batch ? ' ' + (batch + 1) : '');
     const fraction = (i + 0.5) / students;
     const schedule = [];
+    const stopsAt = declining ? Math.min(weeks - 3, half + 1 + i % 4) : weeks - 3;
     for (let week = 0; week < weeks; week++) {
-      if (fraction < 0.55 && (week === 0 || week === end || week % 2 === 0 || random() < 0.82)) schedule.push(week);
-      else if (fraction >= 0.55 && fraction < 0.67 && week < weeks - 3) schedule.push(week);
-      else if (fraction >= 0.67 && fraction < 0.79 && (week < half || (end - week) % 3 === 0)) schedule.push(week);
-      else if (fraction >= 0.79 && fraction < 0.87 && (week === 2 || week === end)) schedule.push(week);
-      else if (fraction >= 0.87 && fraction < 0.95 && (end - week) % 2 === 0) schedule.push(week);
+      if (fraction < regular && (week === 0 || week === end || week % 2 === 0 || random() < 0.82)) schedule.push(week);
+      else if (fraction >= regular && fraction < withdrawal && week < stopsAt) schedule.push(week);
+      else if (fraction >= withdrawal && fraction < decline) {
+        const returns = declining ? (week - half + i % 5) % 6 === 0 : (end - week) % 3 === 0;
+        if (week < half || returns) schedule.push(week);
+      } else if (fraction >= decline && fraction < concentrated && (week === 2 || week === end)) schedule.push(week);
+      else if (fraction >= concentrated && fraction < 0.95 && (end - week) % 2 === 0) schedule.push(week);
     }
     for (const week of schedule) {
       const day = week * 7 + 2;

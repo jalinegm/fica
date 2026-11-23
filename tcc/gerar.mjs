@@ -68,13 +68,14 @@ export function runTcc(args) {
     s.studentsWithGap7, s.studentsWithGap14, s.studentsWithGap21, s.medianCompletionPct])]));
   save('semanal.csv', tccCSV([['Turma', 'Semana', 'Estudantes com acesso', 'Percentual com acesso'],
     ...entries.flatMap(({ name, series }) => series.map(row => [name, row.week, row.n, row.pct]))]));
-  const periods = summaries.map(s => s.start + ' a ' + s.end).join(' · ');
+  const br = day => day.split('-').reverse().join('/');
+  const periods = summaries.map(s => s.name + ': ' + br(s.start) + ' a ' + br(s.end)).join(' · ');
   save('fig_semanal.svg', lineChart({ title: titleCompare(entries), subtitle: 'Estudantes com acesso por semana (%) · ' + periods,
     series: entries.map(({ name, series }, i) => ({ label: name, values: series.map(row => row.pct), highlight: i === entries.length - 1 })),
     xLabels: Array.from({ length: Math.max(...classes.map(c => c.weeks)) }, (_, i) => 'S' + (i + 1)), print: true }));
   save('fig_padroes.svg', patternBars({ title: titlePatterns(summaries.at(-1)), subtitle: 'Distribuição de padrões por oferta · ' + periods,
     rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })), print: true }));
-  return summaries.map(s => s.name + ' · ' + s.n + ' estudantes · ' + s.start + ' a ' + s.end + ' · ' +
+  return summaries.map(s => s.name + ' · ' + s.n + ' estudantes · ' + br(s.start) + ' a ' + br(s.end) + ' · ' +
     PATTERNS.map(({ label, id }) => label + ': ' + s.patternCounts[id]).join(', ')).join('\n');
 }
 

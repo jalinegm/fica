@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-23T21:18:48.191Z",
+        "reason": "user confirmed: AVA IFFar brand colors (green header, cream ground) are a binding brand commitment in PRODUCT.md"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "src/style.css"
+        ],
+        "createdAt": "2026-11-23T21:18:48.329Z",
+        "reason": "user confirmed: AVA IFFar brand colors (green header, cream ground) are a binding brand commitment in PRODUCT.md"
+      }
+    ]
+  }
+}

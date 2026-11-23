@@ -1,8 +1,9 @@
 import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass, titleCompare, titlePatterns, weeklySeries, titleWeekly, sustainedDeclineWeek, daysBetween, shiftDay } from './core.js';
 import { escapeMarkup, lineChart, patternBars, barChartH, scatterChart } from './charts.js';
-import { generateDemo } from './demo.js';
+import { DEMO_OFFERINGS, generateDemo } from './demo.js';
 
 const VIDEO_AJUDA = '';
+const webChartWidth = 1000;
 const tabs = [
   ['triage', 'Quem precisa de contato'], ['diary', 'Diário semanal'],
   ['compare', 'Comparar turmas'], ['completion', 'Conclusão de atividades'],
@@ -216,9 +217,10 @@ function submitReview(form) {
 
 function showDemo() {
   let state = currentState;
-  for (const [seed, start, students] of [[2025, '2025-03-03', 36], [2026, '2026-03-02', 40]]) {
-    const name = 'MSI ' + seed + '/1 (dados fictícios)';
-    const demo = generateDemo({ seed, turma: 'MSI ' + seed + '/1', start, weeks: 18, students });
+  for (const offering of DEMO_OFFERINGS) {
+    const turma = 'MSI ' + offering.turma;
+    const name = turma + ' (dados fictícios)';
+    const demo = generateDemo({ ...offering, turma });
     const c = completeOffer({ name, log: parseLog(demo.logText), completion: parseCompletion(demo.completionText), demo: true }, state.absenceLimit);
     state = addClass(state, c).state;
   }
@@ -446,7 +448,7 @@ function weeklyGraphic(c, print = false) {
   const svg = lineChart({
     title, subtitle: 'Percentual de estudantes com acesso por semana · ' + periodLabel(c.period),
     series: [{ label: 'Turma', values: series.map(row => row.pct), highlight: true }],
-    xLabels: series.map(row => 'S' + row.week), print,
+    xLabels: series.map(row => 'S' + row.week), width: print ? undefined : webChartWidth, print,
     annotation: week === null || !c.students.length ? undefined : { index: week - 1, text: 'Menos de 50%' },
   });
   if (print) return svg;
@@ -540,9 +542,10 @@ function compareView(state, c) {
   const names = entries.map(entry => entry.name);
   const weeks = Array.from({ length: Math.max(...state.classes.map(offer => offer.weeks)) }, (_, i) => 'S' + (i + 1));
   const weekly = lineChart({ title: titleCompare(entries), subtitle: 'Percentual de estudantes com acesso por semana · ofertas alinhadas por semana',
-    series: entries.map(e => ({ label: e.name, values: e.series.map(row => row.pct), highlight: e.highlight })), xLabels: weeks });
+    series: entries.map(e => ({ label: e.name, values: e.series.map(row => row.pct), highlight: e.highlight })), xLabels: weeks, width: webChartWidth });
   const patterns = patternBars({ title: titlePatterns(summaries[state.activeIndex]),
-    subtitle: 'Distribuição percentual dos padrões de acesso por oferta', rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })) });
+    subtitle: 'Distribuição percentual dos padrões de acesso por oferta', width: webChartWidth,
+    rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })) });
   return `<div class="stack">${heading}
     ${chartFigure(weekly, 'Acesso semanal por turma', reportTable('Percentual por semana', ['Semana', ...names], weeks.map((week, i) =>
       [week, ...entries.map(entry => entry.series[i] ? numberPt(entry.series[i].pct) + '%' : '—')])))}
@@ -598,14 +601,15 @@ function completionView(c) {
     : association <= -0.3 ? 'Quem acessou mais semanas concluiu menos atividades'
       : 'Semanas com acesso e percentual de atividades concluídas por estudante';
   const scatter = scatterChart({ title, subtitle: 'Verde indica padrões de atenção · ' + periodLabel(c.period), points,
-    xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas' });
+    xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas', width: webChartWidth });
   const ordered = c.activities.map((label, i) => ({ label,
     value: Math.round(1000 * eligible.filter(row => row.done[i]).length / eligible.length) / 10,
   })).sort((a, b) => a.value - b.value);
   const bars = ordered.map((bar, i) => ({ ...bar, highlight: i < 3 }));
   const lowest = bars[0];
   const byActivity = barChartH({ title: lowest.label + ' teve a menor conclusão (' + numberPt(lowest.value) + '%)',
-    subtitle: 'Percentual dos ' + eligible.length + ' estudantes presentes na análise e no relatório de conclusão', bars, unit: '%' });
+    subtitle: 'Percentual dos ' + eligible.length + ' estudantes presentes na análise e no relatório de conclusão',
+    bars, unit: '%', width: webChartWidth });
   return `<div class="stack">${heading}
     ${chartFigure(scatter, 'Acesso e conclusão por estudante', reportTable('Acesso e conclusão por estudante',
       ['Estudante', 'Semanas com acesso', 'Atividades concluídas'], points.map(p => [p.label, p.x, numberPt(p.y) + '%'])))}

@@ -37,6 +37,9 @@ function makeChart({ title, subtitle, width, height }, draw) {
 
 export function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit = '%', annotation,
   width = 760, height = 236, print = false }) {
+  const labelGap = 15;
+  const plotted = series.filter(item => item.values.length);
+  if (!print) height = Math.max(height, 48 + (plotted.length - 1) * labelGap);
   const margin = Math.min(width * 0.4, Math.max(84, ...series.map(item => item.label.length * 7.5 + 24)));
   const left = 48;
   const right = Math.max(left + 1, width - margin);
@@ -52,20 +55,27 @@ export function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit 
     const axes = `<path d="M${left} 20V${bottom}H${right}" fill="none" stroke="${chartAxes}"/>` +
       svgText(left - 7, 24, yMax + yUnit, `text-anchor="end" fill="${chartMuted}"`) +
       svgText(left - 7, bottom + 4, 0 + yUnit, `text-anchor="end" fill="${chartMuted}"`) + ticks;
-    const entries = series.filter(item => item.values.length).map(item => ({ ...item, labelY: y(item.values.at(-1)) }));
+    const entries = plotted.map(item => ({ ...item, labelY: y(item.values.at(-1)) }));
+    const ordered = [...entries].sort((a, b) => a.labelY - b.labelY);
     let previous = -3;
-    for (const item of [...entries].sort((a, b) => a.labelY - b.labelY)) {
-      item.labelY = Math.max(item.labelY, previous + 15);
+    for (const item of ordered) {
+      item.labelY = Math.max(item.labelY, previous + labelGap);
       previous = item.labelY;
     }
     const overflow = Math.max(0, previous - bottom);
+    if (!print && overflow) {
+      ordered.at(-1).labelY = bottom;
+      for (let i = ordered.length - 2; i >= 0; i--) {
+        ordered[i].labelY = Math.min(ordered[i].labelY, ordered[i + 1].labelY - labelGap);
+      }
+    }
     const lines = entries.map(({ label, values, highlight, labelY }) => {
       const color = highlight ? chartFocus(print) : chartContext;
       const points = values.map((value, index) => x(index) + ',' + y(value)).join(' ');
       const endX = x(values.length - 1);
       const endY = y(values.at(-1));
       const labelX = right + 12;
-      labelY -= overflow;
+      if (print) labelY -= overflow;
       return `<polyline points="${points}" stroke="${color}" fill="none" stroke-width="${highlight ? 3 : 2}"/><circle cx="${endX}" cy="${endY}" r="3" fill="${color}"/>` +
         (Math.abs(labelY - endY) > 3 || endX < right ? `<path d="M${endX + 4} ${endY} L${labelX - 4} ${labelY}" fill="none" stroke="${color}"/>` : '') +
         svgText(labelX, labelY + 4, label, `fill="${highlight ? '#1f5f3b' : chartMuted}"`);
@@ -82,8 +92,7 @@ export function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit 
   });
 }
 
-export function barChartH({ title, subtitle, bars, unit = '', print = false }) {
-  const width = 760;
+export function barChartH({ title, subtitle, bars, unit = '', width = 760, print = false }) {
   const left = 252;
   const ordered = [...bars].sort((a, b) => a.value - b.value);
   const rows = ordered.map(bar => ({ ...bar, lines: chartLines(bar.label, 32) }));
@@ -103,8 +112,7 @@ export function barChartH({ title, subtitle, bars, unit = '', print = false }) {
   });
 }
 
-export function patternBars({ title, subtitle, rows, print = false }) {
-  const width = 820;
+export function patternBars({ title, subtitle, rows, width = 820, print = false }) {
   const left = 205;
   const span = width - left - 15;
   const colors = print ? ['#222', '#444', '#606060', '#808080', '#aaa', '#e1e1e1']
@@ -132,8 +140,7 @@ export function patternBars({ title, subtitle, rows, print = false }) {
     }).join(''));
 }
 
-export function scatterChart({ title, subtitle, points, xLabel, yLabel, print = false }) {
-  const width = 680;
+export function scatterChart({ title, subtitle, points, xLabel, yLabel, width = 680, print = false }) {
   const height = 250;
   const left = 54;
   const right = width - 30;
