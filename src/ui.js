@@ -1,5 +1,5 @@
-import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass, weeklySeries, titleWeekly, sustainedDeclineWeek, daysBetween, shiftDay } from './core.js';
-import { escapeMarkup, lineChart } from './charts.js';
+import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass, titleCompare, titlePatterns, weeklySeries, titleWeekly, sustainedDeclineWeek, daysBetween, shiftDay } from './core.js';
+import { escapeMarkup, lineChart, patternBars, barChartH, scatterChart } from './charts.js';
 import { generateDemo } from './demo.js';
 
 const VIDEO_AJUDA = '';
@@ -104,8 +104,8 @@ function helpView() {
 function analysisView(state, c) {
   if (state.tab === 'triage') return triageView(state, c);
   if (state.tab === 'diary') return diaryView(state, c);
-  const label = tabs.find(([id]) => state.tab === id)[1];
-  return `<section class="surface"><h1 data-view-heading tabindex="-1">${label}</h1><p>${c.students.length} estudantes · ${periodLabel(c.period)}</p></section>`;
+  if (state.tab === 'compare') return compareView(state, c);
+  return completionView(state, c);
 }
 
 export function render(state) {
@@ -491,5 +491,100 @@ function diaryView(state, c) {
       <table class="matrix" aria-label="Dias com acesso em cada semana"><thead><tr><th scope="col">Estudante</th>${headings}<th scope="col">Padrão</th></tr></thead>
       <tbody>${rows}</tbody></table></div>` : '<p class="surface">Nenhum estudante neste filtro.</p>'}
     ${detailView(students.find(row => row.code === studentCode), c, state)}
+  </div>`;
+}
+
+export function compareRows(summaries) {
+  const rows = [
+    ['Estudantes', s => numberPt(s.n)],
+    ['Período', s => periodLabel({ start: s.start, end: s.end })],
+    ['Semanas', s => numberPt(s.weeks)],
+    ['Mediana de semanas com acesso', s => numberPt(s.medianWeeksActive)],
+    ['Mediana da maior ausência (dias)', s => numberPt(s.medianLongestAbsence)],
+    ['Estudantes com ausência de 14+ dias', s => numberPt(s.studentsWithGap14)],
+    ...PATTERNS.map(({ id, label }) => [label, s => s.patternCounts[id] + ' (' + numberPt(s.patternPct[id]) + '%)']),
+    ['Mediana de atividades concluídas', s => s.medianCompletionPct === null ? '—' : numberPt(s.medianCompletionPct) + '%'],
+  ];
+  return rows.map(([label, format]) => ({ label, values: summaries.map(format) }));
+}
+
+function compareView(state, c) {
+  const heading = '<h1 data-view-heading tabindex="-1">Comparar turmas</h1>';
+  if (state.classes.length < 2) return `<section class="surface stack">${heading}
+    <p>Carregue outra oferta para comparar.</p><div><button type="button" data-action="upload">Carregar arquivos</button></div></section>`;
+  const entries = state.classes.map(offer => ({ name: offer.name, series: weeklySeries(offer), highlight: offer === c }));
+  const summaries = state.classes.map(summarizeClass);
+  const names = entries.map(entry => entry.name);
+  const weeks = Array.from({ length: Math.max(...state.classes.map(offer => offer.weeks)) }, (_, i) => 'S' + (i + 1));
+  const weekly = lineChart({ title: titleCompare(entries), subtitle: 'Percentual de estudantes com acesso por semana · ofertas alinhadas por semana',
+    series: entries.map(e => ({ label: e.name, values: e.series.map(row => row.pct), highlight: e.highlight })), xLabels: weeks });
+  const patterns = patternBars({ title: titlePatterns(summaries[state.activeIndex]),
+    subtitle: 'Distribuição percentual dos padrões de acesso por oferta', rows: summaries.map(s => ({ label: s.name, counts: s.patternCounts })) });
+  return `<div class="stack">${heading}
+    ${chartFigure(weekly, 'Acesso semanal por turma', reportTable('Percentual por semana', ['Semana', ...names], weeks.map((week, i) =>
+      [week, ...entries.map(entry => entry.series[i] ? numberPt(entry.series[i].pct) + '%' : '—')])))}
+    ${chartFigure(patterns, 'Padrões por turma', reportTable('Padrões por turma', ['Padrão', ...names],
+      PATTERNS.map(({ id, label }) => [label, ...summaries.map(s => s.patternCounts[id] + ' (' + numberPt(s.patternPct[id]) + '%)')])))}
+    ${reportTable('Indicadores por turma', ['Indicador', ...names], compareRows(summaries).map(({ label, values }) => [label, ...values]))}
+  </div>`;
+}
+
+function rankValues(values) {
+  const order = values.map((value, i) => ({ value, i })).sort((a, b) => a.value - b.value);
+  const result = Array(values.length);
+  for (let start = 0; start < order.length;) {
+    let end = start + 1;
+    while (end < order.length && order[end].value === order[start].value) end++;
+    const rank = (start + end + 1) / 2;
+    for (let i = start; i < end; i++) result[order[i].i] = rank;
+    start = end;
+  }
+  return result;
+}
+
+export function spearman(points) {
+  const xs = rankValues(points.map(p => p.x));
+  const ys = rankValues(points.map(p => p.y));
+  const center = (points.length + 1) / 2;
+  let cov = 0;
+  let sumX = 0;
+  let sumY = 0;
+  for (let i = 0; i < points.length; i++) {
+    const x = xs[i] - center;
+    const y = ys[i] - center;
+    cov += x * y;
+    sumX += x * x;
+    sumY += y * y;
+  }
+  return sumX && sumY ? cov / Math.sqrt(sumX * sumY) : 0;
+}
+
+function completionView(state, c) {
+  const heading = '<h1 data-view-heading tabindex="-1">Conclusão de atividades</h1>';
+  if (!c.hasCompletion) return `<section class="surface stack">${heading}
+    <p>No Moodle, abra <strong>Relatórios → Conclusão de atividades</strong> e baixe o CSV. Carregue-o junto com o log da turma.</p>
+    <div class="actions">${helpButton()}<button type="button" data-action="upload">Carregar arquivos</button></div></section>`;
+  const eligible = c.students.filter(row => row.completionTotal);
+  if (!eligible.length) return `<section class="surface stack">${heading}<p>O relatório está sem registros de conclusão para os estudantes desta turma.</p></section>`;
+  const points = eligible.map(row => ({
+    x: row.weeksActive, y: 100 * row.completed / row.completionTotal,
+    label: shownName(row, state), highlight: row.pattern !== 'regular',
+  }));
+  const title = spearman(points) >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
+    : 'Semanas com acesso e atividades concluídas variaram de forma independente';
+  const scatter = scatterChart({ title, subtitle: 'Verde indica padrões de atenção · ' + periodLabel(c.period), points,
+    xLabel: 'Semanas com acesso', yLabel: 'Atividades concluídas' });
+  const ordered = c.activities.map((label, i) => ({ label,
+    value: Math.round(1000 * eligible.filter(row => row.done[i]).length / eligible.length) / 10,
+  })).sort((a, b) => a.value - b.value);
+  const bars = ordered.map((bar, i) => ({ ...bar, highlight: i < 3 }));
+  const lowest = bars[0];
+  const byActivity = barChartH({ title: lowest.label + ' teve a menor conclusão (' + numberPt(lowest.value) + '%)',
+    subtitle: 'Percentual dos ' + eligible.length + ' estudantes presentes na análise e no relatório de conclusão', bars, unit: '%' });
+  return `<div class="stack">${heading}
+    ${chartFigure(scatter, 'Acesso e conclusão por estudante', reportTable('Acesso e conclusão por estudante',
+      ['Estudante', 'Semanas com acesso', 'Atividades concluídas'], points.map(p => [p.label, p.x, numberPt(p.y) + '%'])))}
+    ${chartFigure(byActivity, 'Conclusão por atividade', reportTable('Conclusão por atividade',
+      ['Atividade', 'Percentual de estudantes'], bars.map(bar => [bar.label, numberPt(bar.value) + '%'])))}
   </div>`;
 }

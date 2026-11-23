@@ -157,3 +157,7 @@ summary { cursor: pointer; font-weight: 650; color: var(--green); }
 .daily-track li { aspect-ratio: 1; background: #f7f5e6; border: 1px solid #9c9d88; border-radius: .15rem; }
 .daily-track .visited { background: var(--ava); border-color: var(--green); }
 .daily-track .unobserved { background: var(--white); border-style: dashed; }
+
+.report-table th { min-width: 7rem; }
+.report-table th[scope="row"] { min-width: 12rem; }
+.chart + .table-scroll { border: 1px solid var(--border); border-radius: .45rem; }
