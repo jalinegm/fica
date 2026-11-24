@@ -11,7 +11,7 @@ test('the offline page ships exactly the hashes for its embedded blocks', () => 
   const digest = value => createHash('sha256').update(value).digest('base64');
   const script = page.match(/<script>([\s\S]*?)<\/script>/)[1];
   const style = page.match(/<style>([\s\S]*?)<\/style>/)[1];
-  assert.ok(page.includes(`default-src 'none'; script-src 'sha256-${digest(script)}'; style-src 'sha256-${digest(style)}'; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'`));
+  assert.ok(page.includes(`default-src 'none'; script-src 'sha256-${digest(script)}'; style-src 'sha256-${digest(style)}'; img-src data:; font-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'`));
   assert.doesNotMatch(page, /\bstyle=("|')|\bsrc="https?:/);
   assert.doesNotMatch(page.replace(/<section id="moodle-help"[\s\S]*?<\/section>/, ''), /\bhref="https?:/);
   for (const label of ['Quem precisa de contato', 'Diário semanal', 'Comparar turmas',

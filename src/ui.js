@@ -1,6 +1,7 @@
 import { buildClass, parseLog, parseCompletion, normalizeName, FormatError, PATTERNS, summarizeClass, titleCompare, titlePatterns, weeklySeries, titleWeekly, sustainedDeclineWeek, daysBetween, shiftDay } from './core.js';
 import { escapeMarkup, lineChart, patternBars, barChartH, scatterChart } from './charts.js';
 import { DEMO_OFFERINGS, generateDemo } from './demo.js';
+import { buildXlsx } from './xlsx.js';
 
 const VIDEO_AJUDA = '';
 const webChartWidth = 1000;
@@ -36,6 +37,16 @@ const helpButton = (text = 'Como baixar os relatórios do Moodle') =>
   `<button type="button" class="link" data-action="help">${text}</button>`;
 const periodLabel = ({ start, end }) => [start, end].map(day => day.split('-').reverse().join('/')).join(' a ');
 const activeClass = state => state.classes[state.activeIndex];
+const lowerParticles = new Set(['da', 'das', 'de', 'do', 'dos', 'e', 'di', 'du', 'van', 'von']);
+
+// Nomes exportados do Moodle chegam às vezes em caixa alta. Só a exibição muda; o CSV mantém o original.
+export function displayName(name) {
+  const text = String(name ?? '').trim();
+  if (!text || text !== text.toLocaleUpperCase('pt-BR') || text === text.toLocaleLowerCase('pt-BR')) return text;
+  return text.toLocaleLowerCase('pt-BR').split(/(\s+|-)/).map((part, i) =>
+    i > 0 && lowerParticles.has(part) ? part : part.charAt(0).toLocaleUpperCase('pt-BR') + part.slice(1)).join('');
+}
+const shownName = name => uiEscape(displayName(name));
 
 function completeOffer(input, absenceLimit) {
   const calculated = buildClass({ ...input, absenceLimit });
@@ -48,27 +59,77 @@ function navigation(state) {
     `<option value="${i}"${i === state.activeIndex ? ' selected' : ''}>${uiEscape(c.name)}</option>`).join('');
   return `<div class="nav-row"><div class="tabs" role="tablist" aria-label="Análises da turma">${tabs.map(([id, name]) =>
     `<button id="tab-${id}" type="button" role="tab" aria-controls="panel-${id}" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? 0 : -1}" data-tab="${id}">${name}</button>`).join('')}</div>
-    ${state.classes.length > 1 ? `<label class="class-select">Turma <select id="active-class">${choices}</select></label>` : ''}</div>
-    <div class="export-actions" aria-label="Exportar análise">
-      <button type="button" data-action="download">Baixar CSV</button>
-      <button type="button" data-action="print">Imprimir / PDF</button>
-    </div>`;
+    <div class="nav-tools">${state.classes.length > 1 ? `<label class="class-select">Turma <select id="active-class">${choices}</select></label>` : ''}
+    <div class="export-actions" role="group" aria-label="Exportar análise">
+      <button type="button" data-action="download">Baixar .xlsx</button>
+      <button type="button" data-action="print" aria-describedby="print-hint">Imprimir / PDF</button>
+    </div><p id="print-hint" class="print-hint">Na impressão, desmarque “Cabeçalhos e rodapés”.</p></div></div>`;
+}
+
+const sampleSheet = [
+  ['Maria', [4,3,4,3,4,4,3,4,3,4], 'Regular', 'green'],
+  ['João', [3,3,1,0,0,0,0,0,0,0], 'Afastamento', 'red'],
+  ['Ana', [2,0,3,0,1,0,2,0,3,0], 'Irregular', 'amber'],
+  ['Pedro', [4,4,3,3,2,1,1,0,0,0], 'Queda progressiva', 'amber'],
+  ['Lúcia', [1,0,0,4,0,0,0,3,0,0], 'Acesso concentrado', 'amber'],
+  ['Rafael', [3,4,3,3,4,3,3,4,3,3], 'Regular', 'green'],
+  ['Bia', [2,3,3,2,3,2,3,3,2,3], 'Regular', 'green'],
+];
+
+const tickShapes = [
+  'M3 11.5 8.2 16.8 17.2 3.6', 'M2.6 12.2 7.6 16.2 16.6 4.4', 'M3.4 10.8 8.6 17 17.6 4.8', 'M2.8 11.8 7.8 16.4 17 3.2',
+];
+const sheetNotes = ['', 'sem acesso desde a S4', '', 'menos dias a cada semana', 'quase tudo na S4 e S8', '', ''];
+
+function sampleSheetView() {
+  const head = Array.from({ length: 10 }, (_, w) => `<th scope="col" class="w${w >= 6 ? ' extra' : ''}">S${w + 1}</th>`).join('');
+  const rows = sampleSheet.map(([name, days, label, tone], r) => {
+    const cells = days.map((n, w) => {
+      const ring = r === 1 && w === 3 ? '<svg class="ring" viewBox="0 0 40 30" aria-hidden="true"><path pathLength="1" d="M20 3C32 2 38 9 37 16 36 24 27 28 18 27 8 26 2 20 4 12 6 5 14 3 24 4"/></svg>' : '';
+      const mark = n ? `<svg class="tick d${n}" viewBox="0 0 20 20" aria-hidden="true"><path pathLength="1" d="${tickShapes[(r * 3 + w) % 4]}"/></svg><span class="sr">${n} ${n === 1 ? 'dia' : 'dias'}</span>` : '<span class="sr">sem acesso</span>';
+      return `<td class="w${w >= 6 ? ' extra' : ''}">${mark}${ring}</td>`;
+    }).join('');
+    return `<tr><th scope="row">${name}</th>${cells}<td class="note"><span class="tag ${tone}">${label}</span>${sheetNotes[r] ? `<em>${sheetNotes[r]}</em>` : ''}</td></tr>`;
+  }).join('');
+  return `<div class="sheet-scroll"><table class="sheet"><caption>Exemplo com dados fictícios: dias com acesso por semana</caption>
+    <thead><tr><th scope="col">Estudante</th>${head}<th scope="col">Padrão</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="sheet-key muted">Traço mais firme = mais dias com acesso na semana. Espaço em branco = nenhum acesso.</p>`;
 }
 
 function uploadView(state) {
-  const field = (id, label) => `<div class="drop field" data-drop="${id}">
-    <label for="${id}">${label}</label><input type="file" id="${id}" accept=".csv,text/csv" aria-describedby="${id}-hint ${id}-error">
-    <small id="${id}-hint" class="muted">Arraste o CSV ou escolha o arquivo.</small>
-    <div id="${id}-error" class="error" role="alert"></div></div>`;
-  return `<section class="surface narrow stack"><h1 data-view-heading tabindex="-1">Carregar arquivos</h1>
-    <p>Os arquivos são lidos só no seu computador. Nada é enviado para a internet.</p>
+  return `<section class="start"><div class="intro"><h1 class="wordmark" data-view-heading tabindex="-1"><span class="word">fica</span>
+      <span class="meaning">Frequência e Indicadores de Continuidade no AVA</span></h1>
+      <p class="question">Quem pode precisar de <mark>contato</mark> nesta semana?</p>
+      <p>A FICA lê o log do Moodle e mostra, estudante por estudante, quem está se afastando e como a turma se distribui pelas semanas.</p></div>
+    <div class="sheet-wrap">${sampleSheetView()}</div>
+    <aside class="ticket"><h2>Sua turma entra aqui</h2>
+    <p class="pointer" aria-hidden="true"><span>comece<br>por aqui</span><svg viewBox="0 0 90 40"><path d="M4 8C30 4 56 12 80 30"/><path d="M66 30 81 31 76 17"/></svg></p>
     <form id="upload-form" class="stack">
-      <div class="drop-grid">${field('log-file', 'Log do curso (obrigatório)')}${field('completion-file', 'Conclusão de atividades (opcional)')}</div>
-      <div class="field"><label for="class-name">Nome da turma (opcional)</label><input id="class-name" placeholder="Ex.: Introdução à Informática · 2026/1"></div>
-      <div class="actions"><button type="submit" class="primary">Analisar</button>${helpButton()}
+      <div class="drop field big" data-drop="log-file">
+        <label for="log-file">Log do curso (obrigatório)</label><input type="file" id="log-file" accept=".csv,text/csv" aria-describedby="log-file-hint log-file-error">
+        <small id="log-file-hint" class="muted pick-hint">Arraste o CSV até aqui ou escolha o arquivo.</small>
+        <div id="log-file-error" class="error" role="alert"></div></div>
+      <div class="drop field" data-drop="completion-file">
+        <label for="completion-file">Conclusão de atividades <span class="muted">(opcional)</span></label><input type="file" id="completion-file" accept=".csv,text/csv" aria-describedby="completion-file-hint completion-file-error">
+        <small id="completion-file-hint" class="muted pick-hint">Mostra o que cada estudante concluiu.</small>
+        <div id="completion-file-error" class="error" role="alert"></div></div>
+      <div class="field"><label for="class-name">Nome da turma <span class="muted">(opcional)</span></label><input id="class-name" placeholder="Ex.: Introdução à Informática · 2026/1"></div>
+      <button type="submit" class="primary go">Analisar a turma</button>
+      <p class="privacy"><strong>Os arquivos são lidos só no seu computador.</strong> Nada é enviado para a internet.</p>
+      <div class="actions">
         <button type="button" class="link" data-action="demo">Ver exemplo com dados fictícios</button>
         ${state.classes.length ? '<button type="button" data-action="return-analysis">Voltar à análise</button>' : ''}</div>
-    </form></section>`;
+    </form></aside>
+    <div class="tray" aria-hidden="true"><svg viewBox="0 0 300 64"><rect x="14" y="14" width="96" height="40" rx="6" fill="#c58b4e"/><rect x="14" y="14" width="96" height="17" rx="6" fill="#2b2b29"/><path d="M22 40h80" stroke="#a06f38" stroke-width="2" stroke-linecap="round"/><rect x="142" y="38" width="62" height="14" rx="7" fill="#f4f1e6" transform="rotate(-5 173 45)"/><rect x="222" y="40" width="46" height="12" rx="6" fill="#f3d65e" transform="rotate(3 245 46)"/><path d="M276 50c3-2 8-2 10 0" stroke="#f4f1e6" stroke-width="2" stroke-linecap="round" opacity=".6"/></svg></div></section>`;
+}
+
+function showPicked(input) {
+  const hint = document.getElementById(input.id + '-hint');
+  const file = input.files?.[0];
+  if (!hint) return;
+  hint.dataset.initial ??= hint.textContent;
+  hint.textContent = file ? `${file.name} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString('pt-BR')} KB, pronto para analisar` : hint.dataset.initial ?? hint.textContent;
+  input.closest('.drop')?.classList.toggle('picked', Boolean(file));
 }
 
 function reviewView(c) {
@@ -79,6 +140,7 @@ function reviewView(c) {
   return `<section class="surface narrow stack"><h1 data-view-heading tabindex="-1">Conferir turma</h1>
     <p>${c.students.length} estudantes · ${c.staff.length} pessoas da equipe</p>
     ${c.warnings.map(warning => `<p class="muted">${warning}</p>`).join('')}
+    ${currentState.classes.some(other => normalizeName(other.name) === normalizeName(c.name)) ? '<p class="notice">Já existe uma turma com este nome. Ela será substituída. Para comparar as duas, mude o nome (por exemplo, com o ano e o semestre).</p>' : ''}
     <form id="review-form" class="stack"><div class="field"><label for="review-name">Nome da turma</label>
       <input id="review-name" value="${uiEscape(c.name)}" required></div>
       <div class="field-grid"><div class="field"><label for="review-start">Início</label><input type="date" id="review-start" value="${c.period.start}" required></div>
@@ -120,6 +182,10 @@ export function render(state) {
   currentState = state;
   const c = activeClass(state);
   document.querySelector('#top-class').textContent = c?.name ?? '';
+  document.documentElement?.classList?.toggle('on-start', state.view === 'upload' || !state.view);
+  const loadButton = document.querySelector('#load-button');
+  loadButton.hidden = state.view === 'upload';
+  loadButton.textContent = state.classes.length ? 'Carregar outra turma' : 'Carregar arquivos';
   document.querySelector('#navigation').innerHTML = navigation(state);
   const main = document.querySelector('main');
   if (state.view === 'help') main.innerHTML = helpView();
@@ -188,8 +254,12 @@ async function submitUpload(form) {
   }
   const [log, completion] = results.map(result => result.value);
   if (completion) completion.students = completion.students.map(({ name, done }) => ({ name, done }));
-  const name = form.querySelector('#class-name').value.trim() || log.course || 'Turma';
-  const draft = completeOffer({ name, log, completion }, currentState.absenceLimit);
+  const typed = form.querySelector('#class-name').value.trim();
+  let draft = completeOffer({ name: typed || log.course || 'Turma', log, completion }, currentState.absenceLimit);
+  if (!typed && draft.period?.start) {
+    const [year, month] = draft.period.start.split('-');
+    draft = { ...draft, name: `${log.course || 'Turma'} · ${year}/${Number(month) <= 6 ? 1 : 2}` };
+  }
   changeView('review', { draft });
 }
 
@@ -255,7 +325,7 @@ function bindPage() {
         break;
       case 'return-analysis': changeView('analysis'); break;
       case 'demo': showDemo(); break;
-      case 'download': downloadCSV(activeClass(currentState)); break;
+      case 'download': downloadSpreadsheet(activeClass(currentState)); break;
       case 'print': window.print(); break;
       case 'copy': void copyGroup(button.dataset.group); break;
       case 'diary-filter': update({ diaryFilter: button.dataset.filter, studentIndex: null }, '#filter-' + button.dataset.filter); break;
@@ -295,7 +365,7 @@ function bindPage() {
       notice('');
       update({ activeIndex: Number(event.target.value), studentIndex: null }, '#active-class');
     }
-    if (event.target.type === 'file') fileError(event.target, '');
+    if (event.target.type === 'file') { fileError(event.target, ''); showPicked(event.target); }
   });
   for (const type of ['dragover', 'dragleave', 'drop']) {
     document.addEventListener(type, event => {
@@ -312,6 +382,7 @@ function bindPage() {
       transfer.items.add(event.dataTransfer.files[0]);
       input.files = transfer.files;
       fileError(input, '');
+      showPicked(input);
     });
   }
   window.addEventListener('beforeprint', () => printReport(activeClass(currentState)));
@@ -331,27 +402,22 @@ export function triageGroups(c) {
 
 export function studentReason(row, weeks) {
   switch (row.pattern) {
-    case 'sem-acesso': return 'nenhum acesso no período';
-    case 'afastamento': return `sem acesso há ${row.daysSinceLast} dias`;
+    case 'sem-acesso': return 'nenhum acesso na disciplina';
+    case 'afastamento': return row.activeDays?.length ? `último acesso em ${row.activeDays.at(-1).split('-').reverse().slice(0, 2).join('/')} · ${row.daysSinceLast} dias sem acesso` : `${row.daysSinceLast} dias sem acesso`;
     case 'queda': return `${row.firstHalfWeeks} semanas com acesso na 1ª metade, ${row.secondHalfWeeks} na 2ª`;
     case 'concentrado': return `acessos em ${row.daysActive} dias`;
     default: return `${row.weeksActive} de ${weeks} semanas com acesso`;
   }
 }
 
-const accessReminder = 'Acesso ao Moodle não é o mesmo que participação ou aprendizagem. Use estes sinais para conversar com o estudante.';
 const numberPt = value => value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
-function classNumbers(c) {
+function classSummary(c) {
   const summary = summarizeClass(c);
-  const metrics = [
-    [summary.n, 'Estudantes'],
-    [numberPt(summary.medianWeeksActive) + ' de ' + c.weeks, 'Semanas com acesso (mediana)'],
-    [c.students.filter(row => row.longestAbsence >= c.absenceLimit).length, 'Estudantes com ausência de ' + c.absenceLimit + '+ dias'],
-    [summary.patternCounts['sem-acesso'] + summary.patternCounts.afastamento, 'Sem acesso ou em afastamento'],
-  ];
-  return `<dl class="class-numbers">${metrics.map(([value, label]) =>
-    `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
+  const urgent = triageGroups(c).slice(0, 2).reduce((total, group) => total + group.students.length, 0);
+  return `<p class="class-summary"><span><strong>${summary.n.toLocaleString('pt-BR')}</strong> ${summary.n === 1 ? 'estudante' : 'estudantes'}</span>
+    <span><strong>${urgent.toLocaleString('pt-BR')}</strong> para contatar agora</span>
+    <span>mediana de <strong>${numberPt(summary.medianWeeksActive)} de ${c.weeks}</strong> semanas com acesso</span></p>`;
 }
 
 function patternRules() {
@@ -368,27 +434,42 @@ function patternRules() {
     <p>A primeira regra atendida define o padrão. Em períodos com um número ímpar de semanas, a semana do meio entra na primeira metade.</p></details>`;
 }
 
+const visibleNames = 8;
+
+function nameList(c, students, limit, showReason = true) {
+  const item = row => `<li><span class="who">${shownName(row.name)}</span>${showReason ? `<span class="why">${studentReason(row, c.weeks)}</span>` : ''}</li>`;
+  if (!students.length) return '<p class="empty">Ninguém neste padrão.</p>';
+  const rest = limit ? students.slice(limit) : [];
+  return `<ul class="names">${students.slice(0, limit || undefined).map(item).join('')}</ul>${rest.length ? `<details class="more">
+    <summary>Ver todos (${students.length})</summary><ul class="names">${rest.map(item).join('')}</ul></details>` : ''}`;
+}
+
+function groupBlock(c, group, copying, limit) {
+  return `<section class="group" aria-labelledby="group-${group.id}">
+    <div class="group-head"><h3 id="group-${group.id}">${group.label}</h3><strong class="group-count">${group.students.length}</strong></div>
+    <p class="mediation">${group.strategy}</p>
+    ${nameList(c, group.students, copying ? limit : 0)}
+    ${copying && group.students.length ? `<button type="button" class="copy" data-action="copy" data-group="${group.id}" aria-label="Copiar lista de ${group.label.toLowerCase()}">Copiar lista</button>` : ''}
+  </section>`;
+}
+
 function groupCards(c, copying = true) {
-  const card = row => `<li><strong>${uiEscape(row.name)}</strong><span>${studentReason(row, c.weeks)}</span></li>`;
   const regular = c.students.filter(row => row.pattern === 'regular');
   const groups = triageGroups(c);
-  return `<div class="triage-grid">${groups.map(group => `<section class="pattern-group">
-    <div class="group-head"><h2 class="tag ${group.tone}">${group.label}</h2><strong class="group-count">${group.students.length}</strong></div>
-    <p class="mediation">Sugestão: ${group.strategy}</p>
-    ${group.students.length ? `<ul class="student-cards">${group.students.map(card).join('')}</ul>` : '<p class="muted">Nenhum estudante neste grupo.</p>'}
-    ${copying ? `<button type="button" data-action="copy" data-group="${group.id}" aria-label="Copiar lista de ${group.label.toLowerCase()}"${group.students.length ? '' : ' disabled'}>Copiar lista</button>` : ''}
-    </section>`).join('')}</div>${copying ? `<details class="regular-list"><summary>Regular (${regular.length})</summary>
-    <ul class="student-cards">${regular.map(card).join('')}</ul></details>` : `<section class="regular-list"><h2>Regular (${regular.length})</h2>
-    <ul class="student-cards">${regular.map(card).join('')}</ul></section>`}`;
+  return `<section class="zone urgent" aria-labelledby="zone-now"><h2 id="zone-now">Contatar agora</h2>
+      <div class="zone-groups">${groups.slice(0, 2).map(group => groupBlock(c, group, copying, visibleNames)).join('')}</div></section>
+    <section class="zone watch" aria-labelledby="zone-watch"><h2 id="zone-watch">Acompanhar</h2>
+      <div class="zone-groups">${groups.slice(2).map(group => groupBlock(c, group, copying, 5)).join('')}</div></section>
+    ${copying ? `<details class="regular-list"><summary>Regular (${regular.length})</summary>${nameList(c, regular, 0)}</details>`
+      : `<section class="regular-list"><h2>Regular (${regular.length})</h2>${nameList(c, regular, 0, false)}</section>`}`;
 }
 
 function triageView(c) {
   return `<div class="stack triage">
-    <div class="section-head"><div><h1 data-view-heading tabindex="-1">Quem precisa de contato</h1><p class="muted">${periodLabel(c.period)}</p></div>
-      <label class="field">Limite de ausência <select id="absence-limit">${[7, 14, 21].map(limit =>
+    <div class="section-head"><div class="head-text"><h1 data-view-heading tabindex="-1">Quem precisa de contato</h1>
+      ${classSummary(c)}<p class="muted period">${periodLabel(c.period)} · ${referenceNote(c)}</p></div>
+      <label class="field limit">Limite de ausência <select id="absence-limit">${[7, 14, 21].map(limit =>
         `<option value="${limit}"${c.absenceLimit === limit ? ' selected' : ''}>${limit} dias</option>`).join('')}</select></label></div>
-    ${classNumbers(c)}
-    <p class="reminder">${accessReminder}</p>
     ${c.warnings.map(warning => `<p class="muted">${warning}</p>`).join('')}
     ${groupCards(c)}
     ${patternRules()}
@@ -398,7 +479,7 @@ function triageView(c) {
 async function copyGroup(id) {
   const c = activeClass(currentState);
   const group = triageGroups(c).find(group => group.id === id);
-  const list = group.students.map(row => row.name).join('\n');
+  const list = group.students.map(row => displayName(row.name)).join('\n');
   notice('');
   try {
     await navigator.clipboard.writeText(list);
@@ -425,7 +506,7 @@ export function tintLevel(days) {
 
 function tagFor(pattern) {
   const { label, tone } = PATTERNS.find(({ id }) => id === pattern);
-  return `<span class="tag ${tone}">${label}</span>`;
+  return `<span class="tag ${tone === 'green' ? 'calm' : 'note'}">${label}</span>`;
 }
 
 function reportTable(caption, headings, rows) {
@@ -448,7 +529,7 @@ function weeklyGraphic(c, print = false) {
   const svg = lineChart({
     title, subtitle: 'Percentual de estudantes com acesso por semana · ' + periodLabel(c.period),
     series: [{ label: 'Turma', values: series.map(row => row.pct), highlight: true }],
-    xLabels: series.map(row => 'S' + row.week), width: print ? undefined : webChartWidth, print,
+    xLabels: series.map(row => 'S' + row.week), width: print ? 1000 : webChartWidth, height: print ? 150 : undefined, print,
     annotation: week === null || !c.students.length ? undefined : { index: week - 1, text: 'Menos de 50%' },
   });
   if (print) return svg;
@@ -475,7 +556,7 @@ function detailView(row, c) {
   ];
   const completed = c.activities.filter((_, index) => row.done?.[index]);
   return `<section class="surface stack" aria-labelledby="detail-title">
-    <div class="section-head"><h2 id="detail-title" tabindex="-1">${uiEscape(row.name)}</h2>
+    <div class="section-head"><h2 id="detail-title" tabindex="-1">${shownName(row.name)}</h2>
     <button type="button" data-action="close-detail">Fechar detalhe</button></div>
     <p>${tagFor(row.pattern)} ${pattern.strategy}</p>
     <div class="stack"><h3>Linha do tempo diária</h3><ul class="daily-track" aria-label="Dias do período">${days}</ul>
@@ -497,13 +578,13 @@ function diaryView(state, c) {
   const sorts = [['name', 'Nome'], ['pattern', 'Padrão'], ['weeks', 'Semanas com acesso']];
   const headings = Array.from({ length: c.weeks }, (_, i) => `<th scope="col">S${i + 1}</th>`).join('');
   const rows = students.map(row => `<tr><th scope="row"><button type="button" class="link" data-action="student-detail"
-    id="student-${c.students.indexOf(row)}" data-index="${c.students.indexOf(row)}">${uiEscape(row.name)}</button></th>
+    id="student-${c.students.indexOf(row)}" data-index="${c.students.indexOf(row)}">${shownName(row.name)}</button></th>
     ${row.weeklyDays.map((days, i) => {
       const label = `S${i + 1}: ${days} ${days === 1 ? 'dia' : 'dias'} com acesso`;
       return `<td class="t${tintLevel(days)}" title="${label}" aria-label="${label}">${days}</td>`;
     }).join('')}<td>${tagFor(row.pattern)}</td></tr>`).join('');
   return `<div class="stack"><div><h1 data-view-heading tabindex="-1">Diário semanal</h1>
-    <p class="muted">${periodLabel(c.period)}</p></div>
+    <p class="muted">${periodLabel(c.period)} · ${referenceNote(c)}</p></div>
     ${weeklyGraphic(c)}
     <div class="section-head"><h2>Dias com acesso por estudante</h2><label class="field">Ordenar por
       <select id="diary-sort">${sorts.map(([value, label]) =>
@@ -536,7 +617,7 @@ export function compareRows(summaries) {
 function compareView(state, c) {
   const heading = '<h1 data-view-heading tabindex="-1">Comparar turmas</h1>';
   if (state.classes.length < 2) return `<section class="surface stack">${heading}
-    <p>Carregue outra oferta para comparar.</p><div><button type="button" data-action="upload">Carregar arquivos</button></div></section>`;
+    <p>Carregue o log de outra turma para comparar. Cada turma precisa de um nome diferente, por exemplo com o ano e o semestre.</p><div><button type="button" data-action="upload">Carregar outra turma</button></div></section>`;
   const entries = state.classes.map(offer => ({ name: offer.name, series: weeklySeries(offer), highlight: offer === c }));
   const summaries = state.classes.map(summarizeClass);
   const names = entries.map(entry => entry.name);
@@ -594,7 +675,7 @@ function completionView(c) {
   if (!eligible.length) return `<section class="surface stack">${heading}<p>O relatório está sem registros de conclusão para os estudantes desta turma.</p></section>`;
   const points = eligible.map(row => ({
     x: row.weeksActive, y: 100 * row.completed / row.completionTotal,
-    label: row.name, highlight: row.pattern !== 'regular',
+    label: displayName(row.name), highlight: row.pattern !== 'regular',
   }));
   const association = spearman(points);
   const title = association >= 0.3 ? 'Quem acessou mais semanas concluiu mais atividades'
@@ -636,29 +717,43 @@ function saveAbsenceLimit(value) {
   }
 }
 
-function exportField(value) {
-  let field = typeof value === 'number' ? String(value).replace('.', ',') : String(value ?? '');
-  if (typeof value === 'string' && /^[\s\uFEFF]*[=+\-@]/.test(field)) field = "'" + field;
-  return /[";\r\n]/.test(field) ? '"' + field.replaceAll('"', '""') + '"' : field;
+const dayPt = day => day ? day.split('-').reverse().join('/') : '';
+
+export function referenceNote(c) {
+  const why = c.refDate >= c.period.end ? 'fim da disciplina' : 'último registro do log';
+  return `dias contados até ${dayPt(c.refDate)} (${why})`;
 }
 
-export function toCSV(c) {
+export function spreadsheet(c) {
   const headers = ['Estudante', 'Acessos', 'Dias com acesso', 'Semanas com acesso', 'Total de semanas',
-    'Maior ausência (dias)', 'Dias desde o último acesso', 'Ausências 7+', 'Ausências 14+', 'Ausências 21+',
+    'Maior ausência (dias)', 'Último acesso', 'Dias sem acesso até a referência', 'Ausências 7+', 'Ausências 14+', 'Ausências 21+',
     'Atividades concluídas', 'Total de atividades', 'Padrão', 'Estratégia sugerida'];
   const rows = c.students.map(row => {
     const pattern = PATTERNS.find(item => item.id === row.pattern);
     return [row.name, row.accesses, row.daysActive, row.weeksActive, c.weeks, row.longestAbsence,
-      row.daysSinceLast, row.gaps7, row.gaps14, row.gaps21, row.completed, row.completionTotal, pattern.label, pattern.strategy];
+      dayPt(row.activeDays?.at(-1)), row.daysSinceLast, row.gaps7, row.gaps14, row.gaps21,
+      row.completed, row.completionTotal, pattern.label, pattern.strategy];
   });
-  return '\uFEFF' + [headers, ...rows].map(row => row.map(exportField).join(';')).join('\r\n') + '\r\n';
+  const about = [
+    ['Turma', c.name], ['Período', periodLabel(c.period)],
+    ['Data de referência', dayPt(c.refDate) + (c.refDate >= c.period.end ? ' (fim da disciplina)' : ' (último registro do log)')],
+    ['Limite de ausência', c.absenceLimit + ' dias'], ['', ''],
+    ['Padrões', ''], ...PATTERNS.map(({ label, strategy }) => [label, strategy]), ['', ''],
+    ['Observação', 'Acesso ao Moodle não é o mesmo que participação ou aprendizagem.'],
+    ['Gerado pela FICA', 'Frequência e Indicadores de Continuidade no AVA'],
+  ];
+  return [
+    { name: 'Estudantes', rows: [headers, ...rows], widths: [36, 10, 12, 12, 10, 14, 13, 16, 11, 11, 11, 13, 12, 22, 48] },
+    { name: 'Sobre', rows: about, widths: [26, 70], header: false },
+  ];
 }
 
-function downloadCSV(c) {
-  const url = URL.createObjectURL(new Blob([toCSV(c)], { type: 'text/csv;charset=utf-8' }));
+function downloadSpreadsheet(c) {
+  const blob = new Blob([buildXlsx(spreadsheet(c))], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'fica_' + (c.name.replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 100) || 'turma') + '.csv';
+  link.download = 'fica_' + (c.name.replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 100) || 'turma') + '.xlsx';
   document.body.append(link);
   link.click();
   link.remove();
@@ -667,12 +762,15 @@ function downloadCSV(c) {
 
 function printReport(c) {
   const report = document.querySelector('#print-report');
-  report.innerHTML = c ? `<div class="print-heading"><p>FICA · Relatório da turma</p>
-    <h1>${uiEscape(c.name)}</h1><p>${periodLabel(c.period)} · Data de referência ${c.refDate.split('-').reverse().join('/')}</p>
-    ${c.demo ? '<p>Dados fictícios de demonstração</p>' : ''}</div>
-    ${classNumbers(c)}
+  report.innerHTML = c ? `<header class="print-heading"><p class="print-brand">fica</p>
+    <h1>${uiEscape(c.name)}</h1>
+    <p class="print-period">${periodLabel(c.period)} · ${referenceNote(c)}${c.demo ? ' · <span class="print-demo">Dados fictícios de demonstração</span>' : ''}</p></header>
+    ${classSummary(c)}
     <figure class="print-chart">${weeklyGraphic(c, true)}</figure>
-    <p class="reminder">${accessReminder}</p>
-    ${groupCards(c, false)}` : '';
+    ${groupCards(c, false)}
+    <footer class="print-footer">
+      <p>${uiEscape(c.name)} · FICA · Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+      <p>© Profa. Jaline Mombach · jaline.mombach@iffarroupilha.edu.br</p>
+    </footer>` : '';
   document.body?.classList.toggle('printing-class', Boolean(c));
 }

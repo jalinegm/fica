@@ -17,7 +17,7 @@ Frequência e Indicadores de Continuidade no AVA. Ferramenta para docentes e tut
 2. Confira o nome da turma e o período sugerido. Em **Revisar quem é equipe**, confira a classificação de professores e tutores. Clique em **Ver análise**.
 3. Na aba **Quem precisa de contato**, leia os sinais de acesso e as sugestões de acompanhamento. Use **Copiar lista** para preparar um contato.
 4. Consulte o **Diário semanal** e selecione um estudante para ver os dias com acesso e seus indicadores. Para comparar ofertas, carregue outro log. A aba **Conclusão de atividades** usa o relatório opcional.
-5. Use **Baixar CSV** ou **Imprimir / PDF** para obter o relatório da turma ativa. As exportações da página incluem os nomes dos estudantes.
+5. Use **Baixar .xlsx** (planilha com uma aba de estudantes e uma aba "Sobre") ou **Imprimir / PDF** para obter o relatório da turma ativa. As exportações da página incluem os nomes dos estudantes.
 
 Use **Ver exemplo com dados fictícios** para conhecer a ferramenta sem carregar arquivos da sua turma.
 
@@ -27,7 +27,7 @@ Baixe o arquivo [index.html](index.html), salve no computador e abra com dois cl
 
 ## Privacidade e interpretação
 
-Os relatórios são lidos no navegador. A política de segurança de conteúdo (CSP) bloqueia conexões de rede iniciadas pela aplicação. A página descarta endereços IP e mantém os relatórios em memória enquanto está aberta. A única preferência guardada no navegador é o limite de ausência. Salve os CSVs e PDFs exportados em um lugar apropriado para dados da turma.
+Os relatórios são lidos no navegador. A política de segurança de conteúdo (CSP) bloqueia conexões de rede iniciadas pela aplicação. A página descarta endereços IP e mantém os relatórios em memória enquanto está aberta. A única preferência guardada no navegador é o limite de ausência. Salve as planilhas e os PDFs exportados em um lugar apropriado para dados da turma.
 
 Acesso ao Moodle não é o mesmo que participação ou aprendizagem. Use estes sinais para conversar com o estudante. Quem nunca acessou só aparece se você carregar o relatório de conclusão de atividades.
 

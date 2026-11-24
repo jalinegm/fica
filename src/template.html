@@ -5,18 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
   <title>FICA · Frequência e Indicadores de Continuidade no AVA</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 48 48%27%3E%3Crect x=%273%27 y=%273%27 width=%2742%27 height=%2742%27 rx=%279%27 fill=%27%231f5f3b%27/%3E%3Cpath d=%27M12 25 20 33 36 13%27 fill=%27none%27 stroke=%27%23fffdf3%27 stroke-width=%275%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
   <style>{{CSS}}</style>
 </head>
 <body>
   <a class="skip" href="#main-content">Ir para o conteúdo</a>
   <header class="top">
     <div class="top-inner">
-      <div class="brand"><strong>FICA</strong><span>Frequência e Indicadores de Continuidade no AVA</span></div>
-      <span id="top-class" class="top-class"></span>
+      <button type="button" class="brand" data-action="upload" aria-label="fica: voltar ao início"><svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="10" class="logo-tile"/><path class="logo-rule" d="M11 33.5h26M11 39h16"/><path class="logo-tick" pathLength="1" d="M11 22 19.5 30.5 37 9"/></svg>
+        <div class="brand-text"><strong>fica</strong><span>Frequência e Indicadores de Continuidade no AVA</span></div></button>
+      <p id="top-class" class="top-class"></p>
       <div class="top-actions">
         <button type="button" data-action="help">Ajuda</button>
-        <button type="button" data-action="upload">Carregar arquivos</button>
+        <button type="button" id="load-button" data-action="upload">Carregar arquivos</button>
       </div>
     </div>
   </header>
@@ -25,6 +26,7 @@
     <p id="notice" class="notice" role="status" hidden></p>
     <main id="main-content" tabindex="-1"></main>
   </div>
+  <footer class="credits"><p>© Profa. Jaline Mombach · <a href="mailto:jaline.mombach@iffarroupilha.edu.br">jaline.mombach@iffarroupilha.edu.br</a></p></footer>
   <article id="print-report" aria-label="Relatório para impressão"></article>
   <script>{{JS}}</script>
 </body>

@@ -1,6 +1,8 @@
-const demoFirstNames = ['Ana', 'Beatriz', 'Caio', 'Daniela', 'Elisa', 'Fábio', 'Gabriela', 'Hugo', 'Isabel', 'João',
-  'Lara', 'Mateus', 'Nina', 'Olívia', 'Paulo', 'Rita', 'Samuel', 'Tainá', 'Vítor', 'Yasmin'];
-const demoLastNames = ['Ribeiro', 'Alves', 'Pereira', 'Andrade', 'Martins', 'Costa', 'Rocha', 'Fernandes', 'Lima', 'Barros'];
+const demoFirstNames = ['Maria', 'João', 'Ana', 'Pedro', 'Lúcia', 'Rafael', 'Beatriz', 'Caio', 'Daniela', 'Elisa',
+  'Fábio', 'Gabriela', 'Hugo', 'Isabel', 'Lara', 'Mateus', 'Nina', 'Olívia', 'Paulo', 'Rita',
+  'Samuel', 'Tainá', 'Vítor', 'Yasmin', 'Bruno', 'Clara', 'Diego', 'Eduarda', 'Felipe', 'Giovana',
+  'Heitor', 'Ingrid', 'Jorge', 'Karen', 'Leandro', 'Marina', 'Nelson', 'Otávio', 'Patrícia', 'Renato',
+  'Sofia', 'Thiago', 'Valentina', 'Wesley', 'Alice', 'Bernardo', 'Cecília', 'Davi', 'Emanuele', 'Flávia'];
 const demoActivities = ['Apresentação no fórum', 'Questionário de informática', 'Pesquisa na web\nAtividade prática',
   'Editor de texto', 'Planilhas', 'Projeto final'];
 
@@ -24,14 +26,6 @@ function demoCSV(rows) {
 
 export function generateDemo({ seed, turma, start, weeks, students, profile = 'stable' }) {
   const random = mulberry32(seed);
-  const surnamesByFirstName = demoFirstNames.map(() => {
-    const surnames = [...demoLastNames];
-    for (let i = surnames.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [surnames[i], surnames[j]] = [surnames[j], surnames[i]];
-    }
-    return surnames;
-  });
   const dateAt = offset => new Date(Date.parse(start + 'T00:00:00Z') + offset * 86_400_000).toISOString().slice(0, 10);
   const end = weeks - 1;
   const half = Math.ceil(weeks / 2);
@@ -47,11 +41,8 @@ export function generateDemo({ seed, turma, start, weeks, students, profile = 's
   };
   const completion = [['', 'Endereço de email', ...demoActivities.flatMap(activity => [activity, ''])]];
   for (let i = 0; i < students; i++) {
-    const firstIndex = i % demoFirstNames.length;
-    const first = demoFirstNames[firstIndex];
-    const last = surnamesByFirstName[firstIndex][Math.floor(i / demoFirstNames.length) % demoLastNames.length];
-    const batch = Math.floor(i / (demoFirstNames.length * demoLastNames.length));
-    const name = first + ' ' + last + (batch ? ' ' + (batch + 1) : '');
+    const batch = Math.floor(i / demoFirstNames.length);
+    const name = demoFirstNames[i % demoFirstNames.length] + (batch ? ' ' + (batch + 1) : '');
     const fraction = (i + 0.5) / students;
     const schedule = [];
     const stopsAt = declining ? Math.min(weeks - 3, half + 1 + i % 4) : weeks - 3;

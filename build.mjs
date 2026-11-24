@@ -5,12 +5,14 @@ import { pathToFileURL } from 'node:url';
 const source = path => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 
 export function buildPage() {
-  const js = '\n' + ['core.js', 'charts.js', 'demo.js', 'ui.js'].map(file =>
+  const js = '\n' + ['core.js', 'charts.js', 'demo.js', 'xlsx.js', 'ui.js'].map(file =>
     source('./src/' + file).replace(/^import [^\n]+\n/gm, '').replace(/^export /gm, '').trimEnd()).join('\n\n') + '\n';
-  const css = '\n' + source('./src/style.css').trimEnd() + '\n';
+  const font = name => 'data:font/woff2;base64,' + readFileSync(new URL('./src/fonts/' + name + '.woff2', import.meta.url)).toString('base64');
+  const fonts = { FONT: font('display'), FONT_BODY: font('body'), FONT_HAND: font('hand') };
+  const css = '\n' + source('./src/style.css').trimEnd().replace(/\{\{(FONT(?:_BODY|_HAND)?)\}\}/g, (_, key) => fonts[key]) + '\n';
   if (/<\/script/i.test(js) || /<\/style/i.test(css)) throw new Error('Bloco inline contém uma tag de fechamento.');
   const sha = value => 'sha256-' + createHash('sha256').update(value, 'utf8').digest('base64');
-  const csp = `default-src 'none'; script-src '${sha(js)}'; style-src '${sha(css)}'; img-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'`;
+  const csp = `default-src 'none'; script-src '${sha(js)}'; style-src '${sha(css)}'; img-src data:; font-src data:; media-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'`;
   const blocks = { CSP: csp, CSS: css, JS: js };
   const page = source('./src/template.html').replace(/\{\{(CSP|CSS|JS)\}\}/g, (_, key) => blocks[key]);
   writeFileSync(new URL('./index.html', import.meta.url), page, 'utf8');

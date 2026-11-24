@@ -86,9 +86,13 @@ export function lineChart({ title, subtitle, series, xLabels, yMax = 100, yUnit 
     const px = x(annotation.index);
     const py = y(value);
     const rightSide = px < (left + right) / 2;
+    const tx = px + (rightSide ? 10 : -10);
+    const ty = py < 50 ? py + 26 : py - 18;
+    const boxWidth = annotation.text.length * 7.6 + 16;
+    const boxX = rightSide ? tx - 8 : tx - boxWidth + 8;
     return axes + lines + `<circle cx="${px}" cy="${py}" r="5" fill="${chartFocus(print)}"/>` +
-      svgText(px + (rightSide ? 8 : -8), py < 42 ? py + 20 : py - 12, annotation.text,
-        `fill="#1f5f3b" text-anchor="${rightSide ? 'start' : 'end'}"`);
+      `<rect x="${boxX}" y="${ty - 15}" width="${boxWidth}" height="22" rx="4" fill="#fffdf3" stroke="#1f5f3b" stroke-width="1"/>` +
+      svgText(tx, ty, annotation.text, `fill="#1f5f3b" font-weight="700" text-anchor="${rightSide ? 'start' : 'end'}"`);
   });
 }
 
@@ -106,7 +110,7 @@ export function barChartH({ title, subtitle, bars, unit = '', width = 760, print
       top += size;
       const length = (width - left - 62) * value / max;
       return lines.map((line, i) => svgText(left - 9, center + 4 + (i - (lines.length - 1) / 2) * 16, line, 'text-anchor="end"')).join('') +
-        `<rect x="${left}" y="${center - 8}" width="${length}" height="16" fill="${highlight ? chartFocus(print) : chartContext}"/>` +
+        `<rect x="${left}" y="${center - 8}" width="${length}" height="16" fill="${highlight ? '#33393a' : '#c4c8ca'}"/>` +
         svgText(left + length + 7, center + 4, value.toLocaleString('pt-BR') + unit);
     }).join('');
   });
@@ -116,7 +120,7 @@ export function patternBars({ title, subtitle, rows, width = 820, print = false 
   const left = 205;
   const span = width - left - 15;
   const colors = print ? ['#222', '#444', '#606060', '#808080', '#aaa', '#e1e1e1']
-    : ['#a2281a', '#fbe3df', '#8a5a00', '#efd8a3', '#fbefcf', '#e1e1e1'];
+    : ['#123324', '#1f5f3b', '#3a7552', '#8fb79c', '#c9dccf', '#ebeee4'];
   return makeChart({ title, subtitle, width, height: Math.max(40, rows.length * 63) }, () =>
     rows.map(({ label, counts }, index) => {
       let leftEdge = left;
@@ -131,7 +135,7 @@ export function patternBars({ title, subtitle, rows, width = 820, print = false 
         const length = span * pct / 100;
         const x = leftEdge;
         leftEdge += length;
-        const labelColor = (print ? i < 3 : i === 0 || i === 2) ? '#fff' : chartInk;
+        const labelColor = i < 3 ? '#fff' : chartInk;
         const labels = chartLines(pattern.label, Math.max(7, Math.floor(length / 6)));
         const caption = pct < 8 ? '' : svgText(x + length / 2, top + 37, Math.round(pct) + '%', `text-anchor="middle" fill="${labelColor}"`) +
           labels.map((line, j) => svgText(x + length / 2, top + 14 + j * 11, line, `text-anchor="middle" font-size="10" fill="${labelColor}"`)).join('');

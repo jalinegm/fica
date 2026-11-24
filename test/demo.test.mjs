@@ -16,11 +16,12 @@ test('fictitious Moodle exports are repeatable and illustrate every pattern', ()
   for (const { id } of PATTERNS) assert.ok(c.students.some(row => row.pattern === id), id);
 });
 
-test('example offerings use varied surnames and show different second-half access', () => {
+test('example offerings use distinct first names only and show different second-half access', () => {
   const classes = DEMO_OFFERINGS.map(options => {
     const demo = generateDemo(options);
     const completion = parseCompletion(demo.completionText);
-    assert.ok(new Set(completion.students.map(row => row.name.split(' ')[1])).size >= 7);
+    assert.equal(new Set(completion.students.map(row => row.name)).size, options.students);
+    assert.ok(completion.students.every(row => !row.name.includes(' ')));
     const c = buildClass({ name: options.turma, log: parseLog(demo.logText), completion });
     assert.equal(c.students.length, options.students);
     assert.equal(c.weeks, options.weeks);

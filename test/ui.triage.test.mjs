@@ -19,9 +19,9 @@ test('triage shows four groups in order and excludes regular students', () => {
 });
 
 test('the contact card gives a factual explanation for each pattern', () => {
-  const row = { daysSinceLast: 14, firstHalfWeeks: 8, secondHalfWeeks: 4, daysActive: 5, weeksActive: 6 };
-  for (const [pattern, expected] of Object.entries({ 'sem-acesso': 'nenhum acesso no período',
-    afastamento: 'sem acesso há 14 dias', queda: '8 semanas com acesso na 1ª metade, 4 na 2ª',
+  const row = { activeDays: ['2026-03-02', '2026-03-09'], daysSinceLast: 14, firstHalfWeeks: 8, secondHalfWeeks: 4, daysActive: 5, weeksActive: 6 };
+  for (const [pattern, expected] of Object.entries({ 'sem-acesso': 'nenhum acesso na disciplina',
+    afastamento: 'último acesso em 09/03 · 14 dias sem acesso', queda: '8 semanas com acesso na 1ª metade, 4 na 2ª',
     concentrado: 'acessos em 5 dias', irregular: '6 de 18 semanas com acesso', regular: '6 de 18 semanas com acesso' })) {
     assert.equal(studentReason({ ...row, pattern }, 18), expected);
   }
